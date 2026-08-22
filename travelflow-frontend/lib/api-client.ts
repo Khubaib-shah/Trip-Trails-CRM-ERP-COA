@@ -170,6 +170,18 @@ async function request<T>(
             });
           } catch (e) {}
 
+          if (typeof window !== "undefined") {
+            try {
+              const { getQueryClient } = await import("@/lib/query-client");
+              const qc = getQueryClient();
+              qc.cancelQueries();
+              qc.clear();
+              
+              const { useAuthStore } = await import("@/store/auth.store");
+              useAuthStore.getState().clearUser();
+            } catch (e) {}
+          }
+
           // Redirect to login
           if (
             typeof window !== "undefined" &&

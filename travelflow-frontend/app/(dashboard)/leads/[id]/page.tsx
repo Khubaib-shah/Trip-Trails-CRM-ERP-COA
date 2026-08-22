@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { API } from "@/lib/data-source";
 import { Lead } from "@/types";
+import { PageSkeleton } from "@/components/shared/PageSkeleton";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { CurrencyDisplay } from "@/components/shared/CurrencyDisplay";
 import { showSuccess } from "@/lib/toast-utils";
@@ -64,11 +65,7 @@ export default function LeadDetailPage() {
   };
 
   if (isLoading) {
-    return (
-      <div className="flex h-full items-center justify-center min-h-[400px]">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[var(--tf-primary)]"></div>
-      </div>
-    );
+    return <PageSkeleton />;
   }
 
   if (!lead) {

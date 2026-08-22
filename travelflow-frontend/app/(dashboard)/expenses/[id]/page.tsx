@@ -12,6 +12,9 @@ import {
   Download,
 } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
+import { usePermissions } from "@/hooks/use-permissions";
+import { PageSkeleton } from "@/components/shared/PageSkeleton";
+import { ErrorState } from "@/components/shared/ErrorState";
 import { showSuccess } from "@/lib/toast-utils";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -38,11 +41,7 @@ export default function ExpenseDetailPage() {
   }, [id]);
 
   if (isLoading) {
-    return (
-      <div className="flex h-full items-center justify-center min-h-[400px]">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[var(--tf-primary)]"></div>
-      </div>
-    );
+    return <PageSkeleton />;
   }
 
   if (!expense) {

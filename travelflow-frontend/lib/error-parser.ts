@@ -46,86 +46,77 @@ export interface UserFriendlyError {
 const STATUS_MAP: Record<number, Omit<UserFriendlyError, "status">> = {
   400: {
     title: "Invalid request",
-    description:
-      "Some of the information provided is incorrect. Please check and try again.",
+    description: "Please check the highlighted information.",
     canRetry: false,
     severity: "warning",
     code: "VALIDATION",
   },
   401: {
     title: "Session expired",
-    description: "Your session has expired. Please sign in again.",
+    description: "Please sign in again.",
     canRetry: false,
     severity: "warning",
     code: "UNAUTHORIZED",
   },
   403: {
-    title: "Permission denied",
-    description: "You don't have permission to perform this action.",
+    title: "No permission",
+    description: "You don't have permission to do this.",
     canRetry: false,
     severity: "warning",
     code: "FORBIDDEN",
   },
   404: {
     title: "Not found",
-    description:
-      "The resource you're looking for doesn't exist or has been removed.",
+    description: "The resource couldn't be found.",
     canRetry: false,
     severity: "info",
     code: "NOT_FOUND",
   },
   408: {
     title: "Request timed out",
-    description:
-      "This request is taking longer than expected. Please try again.",
+    description: "Please try again.",
     canRetry: true,
     severity: "warning",
     code: "TIMEOUT",
   },
   422: {
     title: "Validation error",
-    description:
-      "Please check the highlighted fields and correct any errors.",
+    description: "Please check the highlighted information.",
     canRetry: false,
     severity: "warning",
     code: "VALIDATION",
   },
   429: {
     title: "Too many requests",
-    description:
-      "You've made too many requests. Please wait a moment and try again.",
+    description: "Please wait a moment.",
     canRetry: true,
     severity: "warning",
     code: "RATE_LIMITED",
   },
   500: {
-    title: "Server error",
-    description:
-      "Something went wrong on our end. Please try again in a few moments.",
+    title: "Something went wrong",
+    description: "Please try again.",
     canRetry: true,
     severity: "error",
     code: "SERVER_ERROR",
   },
   502: {
-    title: "Server unavailable",
-    description:
-      "We couldn't connect to the server. Please try again in a few moments.",
+    title: "Can't connect right now",
+    description: "Try again in a moment.",
     canRetry: true,
     severity: "error",
     code: "SERVER_UNAVAILABLE",
   },
   503: {
-    title: "Server unavailable",
-    description:
-      "The server is temporarily unavailable. Please try again shortly.",
+    title: "Can't connect right now",
+    description: "Try again in a moment.",
     canRetry: true,
     severity: "error",
     code: "SERVER_UNAVAILABLE",
   },
   504: {
-    title: "Server timed out",
-    description:
-      "The server took too long to respond. Please try again.",
+    title: "Can't connect right now",
+    description: "Try again in a moment.",
     canRetry: true,
     severity: "error",
     code: "SERVER_UNAVAILABLE",
@@ -196,9 +187,8 @@ export function parseApiError(error: unknown): UserFriendlyError {
   // 1. Browser is offline
   if (isOffline()) {
     return {
-      title: "You're currently offline",
-      description:
-        "Please check your internet connection and try again.",
+      title: "Can't connect",
+      description: "Check your connection and try again.",
       canRetry: true,
       severity: "warning",
       code: "OFFLINE",
@@ -209,8 +199,7 @@ export function parseApiError(error: unknown): UserFriendlyError {
   if (isAbortError(error)) {
     return {
       title: "Request timed out",
-      description:
-        "This request is taking longer than expected. Please try again.",
+      description: "Please try again.",
       canRetry: true,
       severity: "warning",
       code: "TIMEOUT",
@@ -220,9 +209,8 @@ export function parseApiError(error: unknown): UserFriendlyError {
   // 3. Network-level failure (DNS, CORS, ECONNREFUSED, etc.)
   if (isNetworkError(error)) {
     return {
-      title: "Connection failed",
-      description:
-        "We couldn't connect to the server. Please check your connection or try again in a few moments.",
+      title: "Can't connect right now",
+      description: "Try again in a moment.",
       canRetry: true,
       severity: "error",
       code: "SERVER_UNAVAILABLE",
@@ -258,9 +246,8 @@ export function parseApiError(error: unknown): UserFriendlyError {
     // Catch-all for any other 4xx / 5xx
     if (error.status >= 500) {
       return {
-        title: "Server error",
-        description:
-          "Something went wrong on our end. Please try again later.",
+        title: "Something went wrong",
+        description: "Please try again.",
         canRetry: true,
         severity: "error",
         code: "SERVER_ERROR",
@@ -269,11 +256,11 @@ export function parseApiError(error: unknown): UserFriendlyError {
     }
 
     return {
-      title: "Request failed",
+      title: "Something went wrong",
       description:
         error.message && !error.message.startsWith("HTTP ")
           ? error.message
-          : "Something unexpected happened. Please try again.",
+          : "Please try again.",
       canRetry: false,
       severity: "warning",
       code: "UNKNOWN",
@@ -284,9 +271,8 @@ export function parseApiError(error: unknown): UserFriendlyError {
   // 5. ApiError without status (e.g. invalid JSON)
   if (error instanceof ApiError) {
     return {
-      title: "Connection error",
-      description:
-        "We received an unexpected response. Please try again.",
+      title: "Something went wrong",
+      description: "Please try again.",
       canRetry: true,
       severity: "error",
       code: "SERVER_ERROR",
@@ -296,7 +282,7 @@ export function parseApiError(error: unknown): UserFriendlyError {
   // 6. Completely unknown error
   return {
     title: "Something went wrong",
-    description: "An unexpected error occurred. Please try again later.",
+    description: "Please try again.",
     canRetry: true,
     severity: "error",
     code: "UNKNOWN",

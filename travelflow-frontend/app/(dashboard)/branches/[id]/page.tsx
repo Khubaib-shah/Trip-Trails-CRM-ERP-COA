@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CurrencyDisplay } from "@/components/shared/CurrencyDisplay";
 import { BranchPerformance } from "@/components/dashboard/BranchPerformance";
+import { PageSkeleton } from "@/components/shared/PageSkeleton";
 import { DrawerForm } from "@/components/forms/DrawerForm";
 import { FormField, FormSelect } from "@/components/forms/FormField";
 import { Form } from "@/components/ui/form";
@@ -122,11 +123,7 @@ export default function BranchDetailPage() {
   };
 
   if (isLoading) {
-    return (
-      <div className="flex h-full items-center justify-center min-h-[400px]">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[var(--tf-primary)]" />
-      </div>
-    );
+    return <PageSkeleton />;
   }
 
   if (!branch) {

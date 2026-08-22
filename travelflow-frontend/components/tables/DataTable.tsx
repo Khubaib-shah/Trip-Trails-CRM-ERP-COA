@@ -22,6 +22,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Skeleton } from "@/components/ui/skeleton";
 import { DataTablePagination } from "./DataTablePagination";
 import { DataTableToolbar } from "./DataTableToolbar";
 
@@ -124,19 +125,15 @@ export function DataTable<TData, TValue>({
           </TableHeader>
           <TableBody>
             {isLoading ? (
-              <TableRow>
-                <TableCell
-                  colSpan={columns.length}
-                  className="h-24 text-center"
-                >
-                  <div className="flex flex-col items-center justify-center space-y-3">
-                    <div className="h-5 w-5 animate-spin rounded-full border-2 border-[var(--tf-primary)] border-t-transparent"></div>
-                    <span className="text-tf-text-muted text-sm">
-                      Loading data...
-                    </span>
-                  </div>
-                </TableCell>
-              </TableRow>
+              Array.from({ length: 5 }).map((_, i) => (
+                <TableRow key={`skeleton-row-${i}`} className="h-[52px]">
+                  {columns.map((_, colIndex) => (
+                    <TableCell key={`skeleton-cell-${i}-${colIndex}`} className="px-4 py-2">
+                      <Skeleton className="h-4 w-full" />
+                    </TableCell>
+                  ))}
+                </TableRow>
+              ))
             ) : table.getRowModel().rows?.length ? (
               table.getRowModel().rows.map((row, i) => (
                 <TableRow

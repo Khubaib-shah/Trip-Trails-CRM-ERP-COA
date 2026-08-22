@@ -6,13 +6,21 @@ export const defaultQueryClientOptions = {
   defaultOptions: {
     queries: {
       retry: (failureCount: number, error: unknown) => {
-        // Don't retry 401s, 403s, 404s
+        // Never retry 400, 401, 403, 404, 422
         const apiError = parseApiError(error);
-        if ([401, 403, 404].includes(apiError.status || 0)) return false;
-        return failureCount < 2;
+        if ([400, 401, 403, 404, 422].includes(apiError.status || 0)) return false;
+        
+        // Retry 429 and 5xx/Network errors once (failureCount < 1 means 1 retry)
+        return failureCount < 1;
       },
-      retryDelay: (attemptIndex: number) => Math.min(1000 * 2 ** attemptIndex, 10_000),
+      retryDelay: (attemptIndex: number, error: unknown) => {
+        const apiError = parseApiError(error);
+        // Delay longer for 429 Too Many Requests
+        if (apiError.status === 429) return 5000;
+        return Math.min(1000 * 2 ** attemptIndex, 10_000);
+      },
       refetchOnWindowFocus: false, // Prevent unexpected fetching on tab switch
+      refetchOnReconnect: true,
       staleTime: 30_000, // 30s default stale time
       gcTime: 10 * 60 * 1000, // 10m default garbage collection
     },

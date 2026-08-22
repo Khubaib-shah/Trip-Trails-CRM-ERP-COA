@@ -18,6 +18,9 @@ import { showSuccess } from "@/lib/toast-utils";
 
 import { User, Branch, Role, Lead, Booking } from "@/types";
 import { API } from "@/lib/data-source";
+import { ActivityFeed } from "@/components/dashboard/ActivityFeed";
+import { PageSkeleton } from "@/components/shared/PageSkeleton";
+import { parseApiError } from "@/lib/error-parser";
 import { Button } from "@/components/ui/button";
 import { DrawerForm } from "@/components/forms/DrawerForm";
 import { FormField, FormSelect } from "@/components/forms/FormField";
@@ -91,11 +94,7 @@ export default function UserDetailPage() {
   };
 
   if (isLoading) {
-    return (
-      <div className="flex h-full items-center justify-center min-h-[400px]">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[var(--tf-primary)]" />
-      </div>
-    );
+    return <PageSkeleton />;
   }
 
   if (!user) {

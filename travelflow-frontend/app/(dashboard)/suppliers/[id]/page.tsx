@@ -18,6 +18,8 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { API } from "@/lib/data-source";
 import { Supplier, Booking } from "@/types";
+import { DetailHeader } from "@/components/shared/DetailHeader";
+import { PageSkeleton } from "@/components/shared/PageSkeleton";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { CurrencyDisplay } from "@/components/shared/CurrencyDisplay";
 import { DataTable } from "@/components/tables/DataTable";
@@ -167,11 +169,7 @@ export default function SupplierDetailPage() {
   ];
 
   if (isLoading) {
-    return (
-      <div className="flex h-full items-center justify-center min-h-[400px]">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[var(--tf-primary)]"></div>
-      </div>
-    );
+    return <PageSkeleton />;
   }
 
   if (!supplier) {

@@ -1,13 +1,14 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { ShieldCheck, Check, Pencil, Plus, Trash2, ChevronDown, ChevronRight } from "lucide-react";
+import { useState } from "react";
+import { ShieldCheck, Pencil, Plus, Trash2, ChevronDown, ChevronRight } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@/lib/zod-resolver";
 import { showSuccess, showError } from "@/lib/toast-utils";
 
 import { User } from "@/types";
+import { PageSkeleton } from "@/components/shared/PageSkeleton";
 import { Role, PERMISSION_GROUPS } from "@/types/role";
 import { useRoles, useCreateRole, useUpdateRolePermissions, useDeleteRole, useUsers } from "@/features/shared/hooks/queries";
 import { Button } from "@/components/ui/button";
@@ -178,11 +179,7 @@ export default function RolesPage() {
   };
 
   if (isLoading) {
-    return (
-      <div className="flex h-full items-center justify-center min-h-[400px]">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[var(--tf-primary)]" />
-      </div>
-    );
+    return <PageSkeleton />;
   }
 
   return (

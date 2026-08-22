@@ -6,6 +6,7 @@ import { showError } from "@/lib/toast-utils";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { QuotationDrawer } from "@/components/quotations/QuotationDrawer";
+import { PageSkeleton } from "@/components/shared/PageSkeleton";
 
 import { API } from "@/lib/data-source";
 import type { Quotation } from "@/types";
@@ -37,11 +38,7 @@ export default function QuotationDetailPage() {
   }, [id]);
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-[300px]">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[var(--tf-primary)]" />
-      </div>
-    );
+    return <PageSkeleton />;
   }
 
   if (!quotation) return <div>Quotation not found.</div>;

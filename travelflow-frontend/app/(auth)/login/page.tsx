@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Plane, Mail, Lock, ArrowRight, Eye, EyeOff } from "lucide-react";
 import { useForm } from "react-hook-form";
@@ -27,7 +27,7 @@ const loginSchema = z.object({
 
 export default function LoginPage() {
   const router = useRouter();
-  const { login, isLoading } = useAuthStore();
+  const { login, isLoading, isAuthenticated } = useAuthStore();
   const [submitting, setSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
@@ -38,6 +38,15 @@ export default function LoginPage() {
       password: "",
     },
   });
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      router.replace("/dashboard");
+    }
+  }, [isAuthenticated, router]);
+
+  // If authenticated, render nothing to prevent a flash of the login form
+  if (isAuthenticated) return null;
 
   const onSubmit = async (values: z.infer<typeof loginSchema>) => {
     setSubmitting(true);

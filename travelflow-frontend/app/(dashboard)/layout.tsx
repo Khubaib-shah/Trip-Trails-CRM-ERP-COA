@@ -8,6 +8,8 @@ import { useSidebarStore } from "@/store/sidebar.store";
 import { useAuthStore } from "@/store/auth.store";
 import { ErrorBoundary } from "@/components/shared/ErrorBoundary";
 import { Button } from "@/components/ui/button";
+import { WifiOff, Users, Target, FileText, Calendar, ArrowRight } from "lucide-react";
+import Link from "next/link";
 
 // Pages that are restricted by role
 const ROLE_RESTRICTIONS: Record<string, string[]> = {
@@ -62,18 +64,46 @@ export default function DashboardLayout({
   // Show server error state if backend is down
   if (serverError) {
     return (
-      <div className="flex h-screen w-full items-center justify-center bg-[var(--tf-bg)]">
-        <div className="text-tf-text-primary flex flex-col items-center gap-4 text-center max-w-md p-6">
-          <div className="w-16 h-16 bg-[var(--tf-danger)]/10 text-[var(--tf-danger)] rounded-full flex items-center justify-center mb-2">
-            <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-            </svg>
+      <div className="flex min-h-screen w-full flex-col items-center justify-center bg-[var(--tf-bg)] p-6">
+        <div className="max-w-md w-full text-center space-y-8">
+          <div className="mx-auto w-20 h-20 bg-red-500/10 rounded-full flex items-center justify-center mb-6">
+            <WifiOff className="w-10 h-10 text-red-500" />
           </div>
-          <h2 className="text-2xl font-bold">Server Offline</h2>
-          <p className="text-tf-text-secondary">{serverError}</p>
-          <Button onClick={() => window.location.reload()} className="mt-4 bg-tf-primary text-white hover:bg-tf-primary-hover">
+          
+          <div className="space-y-3">
+            <h2 className="text-3xl font-bold text-tf-text-primary tracking-tight">Can't connect right now</h2>
+            <p className="text-tf-text-secondary text-lg">We're having trouble reaching the server. Please check your connection or try again.</p>
+          </div>
+
+          <Button 
+            size="lg"
+            onClick={() => window.location.reload()} 
+            className="w-full bg-tf-primary text-white hover:bg-tf-primary-hover font-semibold h-12"
+          >
             Try Again
           </Button>
+
+          <div className="pt-8 border-t border-tf-border text-left">
+            <h3 className="text-sm font-semibold text-tf-text-secondary uppercase tracking-wider mb-4">Quick Links</h3>
+            <div className="grid grid-cols-2 gap-3">
+              <Link href="/leads" className="flex items-center p-3 rounded-xl border border-tf-border bg-tf-surface hover:bg-tf-surface-hover transition-colors group">
+                <Target className="w-5 h-5 text-tf-primary mr-3" />
+                <span className="text-sm font-medium text-tf-text-primary group-hover:text-tf-primary transition-colors">Leads</span>
+              </Link>
+              <Link href="/customers" className="flex items-center p-3 rounded-xl border border-tf-border bg-tf-surface hover:bg-tf-surface-hover transition-colors group">
+                <Users className="w-5 h-5 text-tf-primary mr-3" />
+                <span className="text-sm font-medium text-tf-text-primary group-hover:text-tf-primary transition-colors">Customers</span>
+              </Link>
+              <Link href="/quotations" className="flex items-center p-3 rounded-xl border border-tf-border bg-tf-surface hover:bg-tf-surface-hover transition-colors group">
+                <FileText className="w-5 h-5 text-tf-primary mr-3" />
+                <span className="text-sm font-medium text-tf-text-primary group-hover:text-tf-primary transition-colors">Quotations</span>
+              </Link>
+              <Link href="/bookings" className="flex items-center p-3 rounded-xl border border-tf-border bg-tf-surface hover:bg-tf-surface-hover transition-colors group">
+                <Calendar className="w-5 h-5 text-tf-primary mr-3" />
+                <span className="text-sm font-medium text-tf-text-primary group-hover:text-tf-primary transition-colors">Bookings</span>
+              </Link>
+            </div>
+          </div>
         </div>
       </div>
     );

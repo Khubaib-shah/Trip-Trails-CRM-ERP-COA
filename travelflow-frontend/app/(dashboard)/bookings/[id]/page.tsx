@@ -9,8 +9,10 @@ import {
   Calendar,
   Clock,
   FileText,
+  Receipt,
   Download,
 } from "lucide-react";
+import { PageSkeleton } from "@/components/shared/PageSkeleton";
 import { useParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -86,11 +88,7 @@ export default function BookingDetailPage() {
   }, [id]);
 
   if (isLoading) {
-    return (
-      <div className="flex h-full items-center justify-center min-h-[400px]">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[var(--tf-primary)]"></div>
-      </div>
-    );
+    return <PageSkeleton />;
   }
 
   if (!booking) {
