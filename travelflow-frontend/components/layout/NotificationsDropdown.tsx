@@ -17,7 +17,7 @@ import { IconButton } from "@/components/shared/IconButton";
 import { Button } from "@/components/ui/button";
 
 interface Notification {
-  _id: string;
+  id: string;
   type: string;
   title: string;
   body?: string;
@@ -94,7 +94,7 @@ export function NotificationsDropdown() {
   const handleNotificationClick = async (notification: Notification) => {
     // Mark as read
     setNotifications((prev) =>
-      prev.map((n) => (n._id === notification._id ? { ...n, read: true } : n)),
+      prev.map((n) => (n.id === notification.id ? { ...n, read: true } : n)),
     );
     setIsOpen(false);
 
@@ -108,7 +108,7 @@ export function NotificationsDropdown() {
 
     if (!notification.read) {
       try {
-        await API.markNotificationRead(notification._id);
+        await API.markNotificationRead(notification.id);
       } catch (err) {
         console.error(err);
       }
@@ -117,7 +117,7 @@ export function NotificationsDropdown() {
 
   const dismissNotification = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
-    setNotifications((prev) => prev.filter((n) => n._id !== id));
+    setNotifications((prev) => prev.filter((n) => n.id !== id));
     try {
       await API.deleteNotification(id);
     } catch (err) {
@@ -177,7 +177,7 @@ export function NotificationsDropdown() {
                 const Icon = typeIcon[notification.type as keyof typeof typeIcon] || Bell;
                 return (
                   <div
-                    key={notification._id}
+                    key={notification.id}
                     onClick={() => handleNotificationClick(notification)}
                     className={`relative flex items-start gap-3 px-4 py-3 cursor-pointer hover:bg-tf-surface-2 transition-colors group ${!notification.read ? "bg-tf-primary-soft/30" : ""
                       }`}
@@ -208,7 +208,7 @@ export function NotificationsDropdown() {
                     </div>
 
                     <IconButton
-                      onClick={(e) => dismissNotification(e, notification._id)}
+                      onClick={(e) => dismissNotification(e, notification.id)}
                       size="icon-xs"
                       className="opacity-0 group-hover:opacity-100 shrink-0"
                       aria-label="Dismiss notification"

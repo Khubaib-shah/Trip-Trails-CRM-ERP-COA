@@ -123,7 +123,7 @@ export default function ReportsPage() {
                   name="branchId"
                   options={[
                     { label: "All Branches", value: "all" },
-                    ...branches.map(b => ({ label: b.name, value: b.id || b._id }))
+                    ...branches.map(b => ({ label: b.name, value: b.id }))
                   ]}
                 />
               </div>
