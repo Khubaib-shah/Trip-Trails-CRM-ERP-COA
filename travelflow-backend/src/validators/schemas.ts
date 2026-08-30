@@ -118,6 +118,7 @@ export const branchSchema = z.object({
   city: z.string().min(2),
   address: z.string().optional(),
   phone: z.string().optional(),
+  currency: z.string().optional(),
   isHeadOffice: z.boolean().optional(),
   status: z.enum(["active", "inactive"]).optional(),
 });

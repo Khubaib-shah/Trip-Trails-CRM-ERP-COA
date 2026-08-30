@@ -9,7 +9,7 @@ import { ColumnDef } from "@tanstack/react-table";
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { DataTableRowActions } from "@/components/tables/DataTableRowActions";
 import { DataTableColumnHeader } from "@/components/tables/DataTableColumnHeader";
-import { formatCurrencyPKR } from "@/lib/utils";
+import { formatCurrency } from "@/lib/utils";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { TableEntityLink } from "@/components/shared/TableEntityLink";
@@ -26,6 +26,7 @@ export function RecentBookingsTable({
   const router = useRouter();
   const lastUpdated = useInvalidationStore((state) => state.lastUpdated);
   const activeBranchId = useBranchStore((state) => state.activeBranchId);
+  const activeCurrency = useBranchStore((state) => state.activeCurrency);
 
   const {
     data = [],
@@ -98,7 +99,7 @@ export function RecentBookingsTable({
       ),
       cell: ({ row }) => (
         <div className="font-semibold text-tf-text-primary font-mono tabular-nums text-sm">
-          {formatCurrencyPKR(row.original.salePrice)}
+          {formatCurrency(row.original.salePrice, activeCurrency)}
         </div>
       ),
     },

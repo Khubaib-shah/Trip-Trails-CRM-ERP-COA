@@ -1,22 +1,16 @@
-import mongoose from "mongoose";
-import { Template, TemplateType } from "../models/Template.model";
+import { prisma } from "../lib/prisma";
 import { ApiError } from "../utils/ApiError";
-import { toJSON, toJSONList } from "../utils/serialize";
+
+export type TemplateType = "quotation_notes" | "quotation_terms" | "invoice_notes" | "invoice_terms";
 
 type TenantContext = {
   agencyId: string;
 };
 
-export async function getTemplates(
-  { agencyId }: TenantContext,
-  type?: TemplateType
-) {
-  const query: any = { agencyId, isDeleted: false };
-  if (type) {
-    query.type = type;
-  }
-  const templates = await Template.find(query).sort({ name: 1 });
-  return toJSONList(templates);
+export async function getTemplates({ agencyId }: TenantContext, type?: TemplateType) {
+  const where: any = { agencyId, isDeleted: false };
+  if (type) where.type = type;
+  return prisma.template.findMany({ where, orderBy: { name: "asc" } });
 }
 
 export async function createTemplate({
@@ -28,16 +22,9 @@ export async function createTemplate({
   if (!name || !type || !content) {
     throw ApiError.badRequest("Name, type, and content are required");
   }
-
-  const template = await Template.create({
-    agencyId,
-    name,
-    type,
-    content,
-    isDeleted: false,
+  return prisma.template.create({
+    data: { agencyId, name, type, content },
   });
-
-  return toJSON(template);
 }
 
 export async function updateTemplate({
@@ -52,45 +39,34 @@ export async function updateTemplate({
   type?: TemplateType;
   content?: string;
 }) {
-  if (!mongoose.Types.ObjectId.isValid(templateId)) {
-    throw ApiError.badRequest("Invalid template id");
-  }
-
-  const template = await Template.findOne({
-    _id: templateId,
-    agencyId,
-    isDeleted: false,
+  const template = await prisma.template.findFirst({
+    where: { id: templateId, agencyId, isDeleted: false },
   });
+  if (!template) throw ApiError.notFound("Template not found");
 
-  if (!template) {
-    throw ApiError.notFound("Template not found");
-  }
-
-  if (name !== undefined) template.name = name;
-  if (type !== undefined) template.type = type;
-  if (content !== undefined) template.content = content;
-
-  await template.save();
-  return toJSON(template);
+  return prisma.template.update({
+    where: { id: templateId },
+    data: {
+      ...(name !== undefined && { name }),
+      ...(type !== undefined && { type }),
+      ...(content !== undefined && { content }),
+    },
+  });
 }
 
 export async function deleteTemplate({
   agencyId,
   templateId,
 }: TenantContext & { templateId: string }) {
-  if (!mongoose.Types.ObjectId.isValid(templateId)) {
-    throw ApiError.badRequest("Invalid template id");
-  }
+  const template = await prisma.template.findFirst({
+    where: { id: templateId, agencyId, isDeleted: false },
+  });
+  if (!template) throw ApiError.notFound("Template not found");
 
-  const template = await Template.findOneAndUpdate(
-    { _id: templateId, agencyId, isDeleted: false },
-    { $set: { isDeleted: true } },
-    { new: true }
-  );
-
-  if (!template) {
-    throw ApiError.notFound("Template not found");
-  }
+  await prisma.template.update({
+    where: { id: templateId },
+    data: { isDeleted: true, deletedAt: new Date() },
+  });
 
   return { deleted: true };
 }

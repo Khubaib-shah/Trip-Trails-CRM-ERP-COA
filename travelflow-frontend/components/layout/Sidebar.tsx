@@ -30,7 +30,7 @@ export function Sidebar() {
   const [branches, setBranches] = useState<Branch[]>([]);
   const router = useRouter();
   const { logout, user } = useAuthStore();
-  const { activeBranchId, setActiveBranchId } = useBranchStore();
+  const { activeBranchId, setActiveBranchId, setActiveBranch } = useBranchStore();
 
   useEffect(() => {
     if (user?.role === "admin") {
@@ -142,7 +142,7 @@ export function Sidebar() {
             <div className="mt-2 space-y-1 animate-in slide-in-from-top-2 duration-200">
               <div
                 onClick={() => {
-                  setActiveBranchId("all");
+                  setActiveBranch("all", "PKR");
                   window.location.reload();
                 }}
                 className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm text-tf-text-secondary hover:bg-tf-surface-2 cursor-pointer transition-colors ${activeBranchId === "all" ? "bg-tf-surface-2" : ""}`}
@@ -160,7 +160,7 @@ export function Sidebar() {
                 <div
                   key={branch.id}
                   onClick={() => {
-                    setActiveBranchId(branch.id);
+                    setActiveBranch(branch.id, branch.currency || "PKR");
                     window.location.reload();
                   }}
                   className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm text-tf-text-secondary hover:bg-tf-surface-2 cursor-pointer transition-colors ${activeBranchId === branch.id ? "bg-tf-surface-2" : ""}`}

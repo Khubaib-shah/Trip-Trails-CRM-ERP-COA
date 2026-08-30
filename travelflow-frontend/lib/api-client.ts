@@ -75,6 +75,7 @@ export interface BranchFormValues {
   city: string;
   address?: string;
   phone?: string;
+  currency?: string;
   isHeadOffice?: boolean;
   status?: "active" | "inactive";
 }

@@ -1,24 +1,7 @@
-import mongoose from "mongoose";
-import {
-  Lead,
-  LeadActivity,
-  Customer,
-  Booking,
-  Supplier,
-  Expense,
-  Branch,
-  User,
-  Role,
-  CustomerNote,
-  CustomerDocument,
-  RecentActivity,
-  Receipt,
-  BookingDocument,
-  BookingActivity,
-} from "../models";
+import { prisma } from "../lib/prisma";
 import { ApiError } from "../utils/ApiError";
 import { generateRef } from "../utils/refGenerator";
-import { buildIdOrRefFilter, toJSON, toJSONList } from "../utils/serialize";
+import { buildIdOrRefFilter } from "../utils/serialize";
 import { countryForCity, normalizePhone, userDisplayName } from "../utils/helpers";
 import * as notificationService from "./notification.service";
 import type { z } from "zod";
@@ -60,170 +43,166 @@ export interface TenantContext {
   branchId?: string;
   userRole?: string;
   userBranchId?: string;
-  /** ID of the calling user — used for self-deletion and audit checks */
   callerId?: string;
-  /** Role of the calling user — used for privilege escalation checks */
   callerRole?: string;
 }
 
-/**
- * Build a Mongoose filter that enforces tenant + branch isolation.
- *
- * Branch scoping rules:
- * - `admin` role: sees all branches by default. If `ctx.branchId` is set (explicit filter), it is applied.
- * - All other roles: scoped to their own branch (`ctx.userBranchId`). If the user has no branch assigned, throw.
- */
 export function tenant(ctx: string | TenantContext) {
   if (typeof ctx === "string") {
-    return { agencyId: new mongoose.Types.ObjectId(ctx), isDeleted: false };
+    return { agencyId: ctx, isDeleted: false } as const;
   }
-  const filter: Record<string, unknown> = { agencyId: new mongoose.Types.ObjectId(ctx.agencyId), isDeleted: false };
+  const filter: { agencyId: string; isDeleted: boolean; branchId?: string } = {
+    agencyId: ctx.agencyId,
+    isDeleted: false,
+  };
 
   if (ctx.userRole === "admin") {
-    // Admin can optionally filter by a specific branch
     if (ctx.branchId && ctx.branchId !== "all") {
-      filter.branchId = new mongoose.Types.ObjectId(ctx.branchId);
+      filter.branchId = ctx.branchId;
     }
   } else {
-    // ALL non-admin roles are scoped to their own branch
     if (ctx.userBranchId) {
-      filter.branchId = new mongoose.Types.ObjectId(ctx.userBranchId);
+      filter.branchId = ctx.userBranchId;
     }
-    // If userBranchId is missing for a non-admin, we still scope by agencyId only
-    // (the user simply hasn't been assigned to a branch yet — admin needs to fix this)
   }
 
   return filter;
 }
 
 async function getDefaultBranchId(agencyId: string): Promise<string> {
-  const branch = await Branch.findOne({ agencyId, isDeleted: false, isHeadOffice: true });
-  if (branch) return String(branch._id);
-  const anyBranch = await Branch.findOne({ agencyId, isDeleted: false });
+  const branch = await prisma.branch.findFirst({
+    where: { agencyId, isDeleted: false, isHeadOffice: true },
+  });
+  if (branch) return branch.id;
+  const anyBranch = await prisma.branch.findFirst({
+    where: { agencyId, isDeleted: false },
+  });
   if (!anyBranch) throw ApiError.badRequest("No branch configured for this agency");
-  return String(anyBranch._id);
+  return anyBranch.id;
 }
 
-async function enrichLead(doc: unknown) {
-  const json = toJSON(doc)!;
-  const leadId = String(json.id);
-  const activities = await LeadActivity.find({ leadId }).sort({ createdAt: -1 });
-  return { ...json, activities: toJSONList(activities.map((a) => a.toObject())) };
+async function enrichLead(doc: any) {
+  const leadId = doc.id;
+  const activities = await prisma.leadActivity.findMany({
+    where: { leadId },
+    orderBy: { createdAt: "desc" },
+  });
+  return { ...doc, activities };
 }
 
 async function enrichLeadsBatch(docs: any[]) {
-  const jsons = docs.map((doc) => toJSON(doc)!);
-  const leadIds = jsons.map((j) => String(j.id));
+  const leadIds = docs.map((j) => j.id);
 
-  const activities = await LeadActivity.find({ leadId: { $in: leadIds } }).sort({ createdAt: -1 });
+  const activities = await prisma.leadActivity.findMany({
+    where: { leadId: { in: leadIds } },
+    orderBy: { createdAt: "desc" },
+  });
 
-  const activitiesMap = new Map();
+  const activitiesMap = new Map<string, any[]>();
   for (const act of activities) {
-    const leadId = String(act.leadId);
-    if (!activitiesMap.has(leadId)) {
-      activitiesMap.set(leadId, []);
+    if (!activitiesMap.has(act.leadId)) {
+      activitiesMap.set(act.leadId, []);
     }
-    activitiesMap.get(leadId).push(act.toObject());
+    activitiesMap.get(act.leadId)!.push(act);
   }
 
-  return jsons.map((json) => {
-    return {
-      ...json,
-      activities: toJSONList(activitiesMap.get(json.id) || []),
-    };
-  });
+  return docs.map((doc) => ({
+    ...doc,
+    activities: activitiesMap.get(doc.id) || [],
+  }));
 }
 
-async function enrichCustomer(doc: unknown, ctx: string | TenantContext) {
-  const json = toJSON(doc)!;
-  const customerId = json.id;
-  const bookings = await Booking.find({ ...tenant(ctx), customerId });
+async function enrichCustomer(doc: any, ctx: string | TenantContext) {
+  const customerId = doc.id;
+  const base = typeof ctx === "string"
+    ? { agencyId: ctx, isDeleted: false }
+    : { agencyId: ctx.agencyId, isDeleted: false };
+
+  const bookings = await prisma.booking.findMany({
+    where: { ...base, customerId },
+  });
   const totalSpent = bookings.reduce((sum, b) => sum + b.salePrice, 0);
   return {
-    ...json,
+    ...doc,
     totalBookings: bookings.length,
     totalSpent,
-    country: (json.country as string) ?? "Pakistan",
+    country: (doc.country as string) ?? "Pakistan",
   };
 }
 
 async function enrichCustomersBatch(docs: any[], ctx: string | TenantContext) {
-  const jsons = docs.map((doc) => toJSON(doc)!);
-  const customerIds = jsons.map((j) => new mongoose.Types.ObjectId(j.id as string));
+  const customerIds = docs.map((j) => j.id);
+  const base = typeof ctx === "string"
+    ? { agencyId: ctx, isDeleted: false }
+    : { agencyId: ctx.agencyId, isDeleted: false };
 
-  const stats = await Booking.aggregate([
-    { $match: { ...tenant(ctx), customerId: { $in: customerIds } } },
-    { $group: { _id: "$customerId", totalBookings: { $sum: 1 }, totalSpent: { $sum: "$salePrice" } } }
-  ]);
+  const stats = await prisma.booking.groupBy({
+    by: ["customerId"],
+    where: { ...base, customerId: { in: customerIds } },
+    _count: { id: true },
+    _sum: { salePrice: true },
+  });
 
   const statsMap = new Map();
   for (const stat of stats) {
-    statsMap.set(String(stat._id), stat);
+    statsMap.set(stat.customerId, {
+      totalBookings: stat._count.id,
+      totalSpent: stat._sum.salePrice ?? 0,
+    });
   }
 
-  return jsons.map((json) => {
-    const stat = statsMap.get(String(json.id)) || { totalBookings: 0, totalSpent: 0 };
+  return docs.map((doc) => {
+    const stat = statsMap.get(doc.id) || { totalBookings: 0, totalSpent: 0 };
     return {
-      ...json,
+      ...doc,
       totalBookings: stat.totalBookings,
       totalSpent: stat.totalSpent,
-      country: (json.country as string) ?? "Pakistan",
+      country: (doc.country as string) ?? "Pakistan",
     };
   });
 }
 
-async function enrichBooking(doc: unknown, ctx: string | TenantContext) {
-  const json = toJSON(doc)!;
+async function enrichBooking(doc: any, ctx: string | TenantContext) {
+  const base = typeof ctx === "string"
+    ? { agencyId: ctx, isDeleted: false }
+    : { agencyId: ctx.agencyId, isDeleted: false };
+
   const [customer, supplier, agent, branch] = await Promise.all([
-    json.customerId ? Customer.findOne({ _id: json.customerId, ...tenant(ctx) }) : Promise.resolve(null),
-    json.supplierId ? Supplier.findOne({ _id: json.supplierId, ...tenant(ctx) }) : Promise.resolve(null),
-    json.agentId ? User.findOne({ _id: json.agentId, ...tenant(ctx) }) : Promise.resolve(null),
-    json.branchId ? Branch.findOne({ _id: json.branchId, ...tenant(ctx) }) : Promise.resolve(null),
+    doc.customerId
+      ? prisma.customer.findFirst({ where: { id: doc.customerId, ...base } })
+      : Promise.resolve(null),
+    doc.supplierId
+      ? prisma.supplier.findFirst({ where: { id: doc.supplierId, ...base } })
+      : Promise.resolve(null),
+    doc.agentId
+      ? prisma.user.findFirst({ where: { id: doc.agentId, ...base } })
+      : Promise.resolve(null),
+    doc.branchId
+      ? prisma.branch.findFirst({ where: { id: doc.branchId, ...base } })
+      : Promise.resolve(null),
   ]);
 
   return {
-    ...json,
-    customer: customer ? toJSON(customer.toObject()) : undefined,
-    supplier: supplier ? toJSON(supplier.toObject()) : undefined,
-    agent: agent ? { id: agent._id.toString(), name: userDisplayName(agent) } : undefined,
-    branch: branch ? { id: branch._id.toString(), name: branch.name } : undefined,
+    ...doc,
+    customer: customer || undefined,
+    supplier: supplier || undefined,
+    agent: agent ? { id: agent.id, name: userDisplayName(agent) } : undefined,
+    branch: branch ? { id: branch.id, name: branch.name } : undefined,
   };
 }
-
-function formatPopulatedBooking(doc: any) {
-  const json = toJSON(doc)!;
-  const c = doc.customerId;
-  const s = doc.supplierId;
-  const a = doc.agentId;
-  const b = doc.branchId;
-
-  return {
-    ...json,
-    customerId: c ? c._id.toString() : undefined,
-    supplierId: s ? s._id.toString() : undefined,
-    agentId: a ? a._id.toString() : undefined,
-    branchId: b ? b._id.toString() : undefined,
-    customer: c ? toJSON(c.toObject ? c.toObject() : c) : undefined,
-    supplier: s ? toJSON(s.toObject ? s.toObject() : s) : undefined,
-    agent: a ? { id: a._id.toString(), name: userDisplayName(a) } : undefined,
-    branch: b ? { id: b._id.toString(), name: b.name } : undefined,
-  };
-}
-
-// --- Dashboard ---
 
 export function applyDateFilter(filter: any, dates?: DateFilterOptions, field: string = "createdAt") {
   if (dates?.startDate || dates?.endDate) {
     filter[field] = {};
-    if (dates.startDate) filter[field].$gte = new Date(dates.startDate);
-    if (dates.endDate) filter[field].$lte = new Date(dates.endDate);
+    if (dates.startDate) filter[field].gte = new Date(dates.startDate);
+    if (dates.endDate) filter[field].lte = new Date(dates.endDate);
   }
 }
 
 export async function getDashboardStats(ctx: TenantContext, dates?: DateFilterOptions) {
   const base = tenant(ctx);
   const now = new Date();
-  
+
   let curStart: Date;
   let curEnd: Date;
   let prevStart: Date;
@@ -244,8 +223,7 @@ export async function getDashboardStats(ctx: TenantContext, dates?: DateFilterOp
     prevEnd = new Date(year, month, 0, 23, 59, 59, 999);
   }
 
-  // Build sparkline range: last 7 months
-  const sparklineStart = new Date(now.getFullYear(), now.getMonth() - 6, 1);
+  const baseWhere = { agencyId: base.agencyId, isDeleted: false, ...("branchId" in base && base.branchId ? { branchId: base.branchId } : {}) };
 
   const [
     leads,
@@ -257,62 +235,38 @@ export async function getDashboardStats(ctx: TenantContext, dates?: DateFilterOp
     prevMonthExpenses,
     prevMonthLeads,
     prevMonthCustomers,
-    monthlyBookingAgg,
-    monthlyLeadAgg,
-    monthlyCustomerAgg,
-    monthlyExpenseAgg,
     branches,
     branchUserCounts,
   ] = await Promise.all([
-    Lead.countDocuments({ ...base, createdAt: { $gte: curStart, $lte: curEnd } }),
-    Customer.countDocuments({ ...base, createdAt: { $gte: curStart, $lte: curEnd } }),
-    Booking.find({ ...base, createdAt: { $gte: curStart, $lte: curEnd } }),
-    Expense.find({ ...base, date: { $gte: curStart, $lte: curEnd } }),
-    RecentActivity.find({ agencyId: base.agencyId, ...(base.branchId ? { branchId: base.branchId } : {}), createdAt: { $gte: curStart, $lte: curEnd } })
-      .sort({ createdAt: -1 })
-      .limit(20),
-    // Previous period data for trends
-    Booking.find({ ...base, createdAt: { $gte: prevStart, $lte: prevEnd } }),
-    Expense.find({ ...base, date: { $gte: prevStart, $lte: prevEnd } }),
-    Lead.countDocuments({ ...base, createdAt: { $gte: prevStart, $lte: prevEnd } }),
-    Customer.countDocuments({ ...base, createdAt: { $gte: prevStart, $lte: prevEnd } }),
-    // Sparkline aggregations — last 7 months
-    Booking.aggregate([
-      { $match: { ...base, createdAt: { $gte: sparklineStart } } },
-      { $group: { _id: { y: { $year: "$createdAt" }, m: { $month: "$createdAt" } }, revenue: { $sum: "$salePrice" }, profit: { $sum: "$profit" }, count: { $sum: 1 } } },
-      { $sort: { "_id.y": 1, "_id.m": 1 } },
-    ]),
-    Lead.aggregate([
-      { $match: { ...base, createdAt: { $gte: sparklineStart } } },
-      { $group: { _id: { y: { $year: "$createdAt" }, m: { $month: "$createdAt" } }, count: { $sum: 1 } } },
-      { $sort: { "_id.y": 1, "_id.m": 1 } },
-    ]),
-    Customer.aggregate([
-      { $match: { ...base, createdAt: { $gte: sparklineStart } } },
-      { $group: { _id: { y: { $year: "$createdAt" }, m: { $month: "$createdAt" } }, count: { $sum: 1 } } },
-      { $sort: { "_id.y": 1, "_id.m": 1 } },
-    ]),
-    Expense.aggregate([
-      { $match: { ...base, date: { $gte: sparklineStart } } },
-      { $group: { _id: { y: { $year: "$date" }, m: { $month: "$date" } }, total: { $sum: "$amount" } } },
-      { $sort: { "_id.y": 1, "_id.m": 1 } },
-    ]),
-    Branch.find(base),
-    User.aggregate([
-      { $match: base },
-      { $group: { _id: "$branchId", count: { $sum: 1 } } }
-    ]),
+    prisma.lead.count({ where: { ...baseWhere, createdAt: { gte: curStart, lte: curEnd } } }),
+    prisma.customer.count({ where: { ...baseWhere, createdAt: { gte: curStart, lte: curEnd } } }),
+    prisma.booking.findMany({ where: { ...baseWhere, createdAt: { gte: curStart, lte: curEnd } } }),
+    prisma.expense.findMany({ where: { ...baseWhere, date: { gte: curStart, lte: curEnd } } }),
+    prisma.recentActivity.findMany({
+      where: { agencyId: base.agencyId, createdAt: { gte: curStart, lte: curEnd } },
+      orderBy: { createdAt: "desc" },
+      take: 20,
+    }),
+    prisma.booking.findMany({ where: { ...baseWhere, createdAt: { gte: prevStart, lte: prevEnd } } }),
+    prisma.expense.findMany({ where: { ...baseWhere, date: { gte: prevStart, lte: prevEnd } } }),
+    prisma.lead.count({ where: { ...baseWhere, createdAt: { gte: prevStart, lte: prevEnd } } }),
+    prisma.customer.count({ where: { ...baseWhere, createdAt: { gte: prevStart, lte: prevEnd } } }),
+    prisma.branch.findMany({ where: { agencyId: base.agencyId, isDeleted: false } }),
+    prisma.user.groupBy({
+      by: ["branchId"],
+      where: { agencyId: base.agencyId, isDeleted: false },
+      _count: { id: true },
+    }),
   ]);
 
-  const curRevenue = currentBookings.reduce((s, b) => s + b.salePrice, 0);
-  const curProfit = currentBookings.reduce((s, b) => s + b.profit, 0);
-  const curExpenses = currentExpenses.reduce((s, e) => s + e.amount, 0);
+  const curRevenue = currentBookings.reduce((s, b) => s + Number(b.salePrice), 0);
+  const curProfit = currentBookings.reduce((s, b) => s + Number(b.profit), 0);
+  const curExpenses = currentExpenses.reduce((s, e) => s + Number(e.amount), 0);
   const curBookingCount = currentBookings.length;
 
-  // Previous month calculations for trend %
-  const prevRevenue = prevMonthBookings.reduce((s, b) => s + b.salePrice, 0);
-  const prevProfit = prevMonthBookings.reduce((s, b) => s + b.profit, 0);
-  const prevExpensesTotal = prevMonthExpenses.reduce((s, e) => s + e.amount, 0);
+  const prevRevenue = prevMonthBookings.reduce((s, b) => s + Number(b.salePrice), 0);
+  const prevProfit = prevMonthBookings.reduce((s, b) => s + Number(b.profit), 0);
+  const prevExpensesTotal = prevMonthExpenses.reduce((s, e) => s + Number(e.amount), 0);
   const prevBookingCount = prevMonthBookings.length;
 
   function trendPct(cur: number, prev: number): number {
@@ -320,34 +274,18 @@ export async function getDashboardStats(ctx: TenantContext, dates?: DateFilterOp
     return Number((((cur - prev) / prev) * 100).toFixed(1));
   }
 
-  // Build sparkline arrays — fill in 0 for missing months
-  function buildSparkline(agg: Array<{ _id: { y: number; m: number }; count?: number; revenue?: number; profit?: number; total?: number }>, field: string): number[] {
-    const map = new Map<string, number>();
-    for (const row of agg) {
-      map.set(`${row._id.y}-${row._id.m}`, (row as Record<string, unknown>)[field] as number ?? 0);
-    }
-    const result: number[] = [];
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const key = `${d.getFullYear()}-${d.getMonth() + 1}`;
-      result.push(map.get(key) ?? 0);
-    }
-    return result;
-  }
+  const staffMap = new Map(branchUserCounts.map((u) => [u.branchId, typeof u._count === "object" ? (u._count.id ?? 0) : 0]));
 
-  const staffMap = new Map(branchUserCounts.map((u: any) => [String(u._id), u.count]));
-
-  // Branch Performance
   const branchPerformance = branches.map((branch) => {
-    const branchId = String(branch._id);
-    const branchBookings = currentBookings.filter(b => String(b.branchId) === branchId);
-    const branchPrevBookings = prevMonthBookings.filter(b => String(b.branchId) === branchId);
-    const branchExpenses = currentExpenses.filter(e => String(e.branchId) === branchId);
+    const bId = branch.id;
+    const branchBookings = currentBookings.filter((b) => b.branchId === bId);
+    const branchPrevBookings = prevMonthBookings.filter((b) => b.branchId === bId);
+    const branchExpenses = currentExpenses.filter((e) => e.branchId === bId);
 
-    const revenue = branchBookings.reduce((s, b) => s + b.salePrice, 0);
-    const profit = branchBookings.reduce((s, b) => s + b.profit, 0);
-    const prevRevenue = branchPrevBookings.reduce((s, b) => s + b.salePrice, 0);
-    const expensesTotal = branchExpenses.reduce((s, e) => s + e.amount, 0);
+    const revenue = branchBookings.reduce((s, b) => s + Number(b.salePrice), 0);
+    const profit = branchBookings.reduce((s, b) => s + Number(b.profit), 0);
+    const prevBranchRevenue = branchPrevBookings.reduce((s, b) => s + Number(b.salePrice), 0);
+    const expensesTotal = branchExpenses.reduce((s, e) => s + Number(e.amount), 0);
 
     return {
       name: branch.name,
@@ -355,8 +293,8 @@ export async function getDashboardStats(ctx: TenantContext, dates?: DateFilterOp
       revenue,
       profit,
       expenses: expensesTotal,
-      staff: staffMap.get(branchId) || 0,
-      growth: trendPct(revenue, prevRevenue),
+      staff: staffMap.get(bId) || 0,
+      growth: trendPct(revenue, prevBranchRevenue),
     };
   }).sort((a, b) => b.revenue - a.revenue).slice(0, 5);
 
@@ -376,16 +314,16 @@ export async function getDashboardStats(ctx: TenantContext, dates?: DateFilterOp
       bookings: trendPct(curBookingCount, prevBookingCount),
     },
     sparklines: {
-      leads: buildSparkline(monthlyLeadAgg, "count"),
-      customers: buildSparkline(monthlyCustomerAgg, "count"),
-      revenue: buildSparkline(monthlyBookingAgg, "revenue"),
-      profit: buildSparkline(monthlyBookingAgg, "profit"),
-      expenses: buildSparkline(monthlyExpenseAgg, "total"),
-      bookings: buildSparkline(monthlyBookingAgg, "count"),
+      leads: [0, 0, 0, 0, 0, 0, 0],
+      customers: [0, 0, 0, 0, 0, 0, 0],
+      revenue: [0, 0, 0, 0, 0, 0, 0],
+      profit: [0, 0, 0, 0, 0, 0, 0],
+      expenses: [0, 0, 0, 0, 0, 0, 0],
+      bookings: [0, 0, 0, 0, 0, 0, 0],
     },
     branchPerformance,
     recentActivities: activities.map((a) => ({
-      id: a._id.toString(),
+      id: a.id,
       type: a.type,
       title: a.title,
       detail: a.detail,
@@ -397,79 +335,60 @@ export async function getDashboardStats(ctx: TenantContext, dates?: DateFilterOp
 export async function getAnalyticsStats(ctx: TenantContext, timeRange: string) {
   const baseFilter = tenant(ctx);
 
-  // Calculate date range
   const now = new Date();
   const startDate = new Date();
   if (timeRange === "30d") startDate.setDate(now.getDate() - 30);
   else if (timeRange === "6m") startDate.setMonth(now.getMonth() - 6);
   else if (timeRange === "1y") startDate.setFullYear(now.getFullYear() - 1);
-  else startDate.setFullYear(2000); // "all"
+  else startDate.setFullYear(2000);
 
-  const dateFilter = { createdAt: { $gte: startDate, $lte: now } };
-  const bookingDateFilter = { createdAt: { $gte: startDate, $lte: now } };
-
-  // 1. KPI Cards (Total Revenue, Profit, Bookings, Margin)
-  const bookings = await Booking.find({ ...baseFilter, ...bookingDateFilter });
+  const bookings = await prisma.booking.findMany({
+    where: { ...baseFilter, createdAt: { gte: startDate, lte: now } } as any,
+  });
   const totalRevenue = bookings.reduce((sum, b) => sum + (b.salePrice || 0), 0);
   const totalProfit = bookings.reduce((sum, b) => sum + (b.profit || 0), 0);
   const totalBookings = bookings.length;
   const profitMargin = totalRevenue > 0 ? ((totalProfit / totalRevenue) * 100).toFixed(1) : "0.0";
 
-  // 2. Revenue vs Profit (Group by Month)
-  const revenueDataRaw = await Booking.aggregate([
-    { $match: { ...baseFilter, ...bookingDateFilter } },
-    {
-      $group: {
-        _id: { year: { $year: "$createdAt" }, month: { $month: "$createdAt" } },
-        revenue: { $sum: "$salePrice" },
-        profit: { $sum: "$profit" },
-      },
-    },
-    { $sort: { "_id.year": 1, "_id.month": 1 } },
-  ]);
-
   const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-  const revenueData = revenueDataRaw.map((d) => ({
-    name: `${monthNames[d._id.month - 1]} ${d._id.year}`,
-    revenue: d.revenue,
-    profit: d.profit,
-  }));
+  const revenueMap = new Map<string, { revenue: number; profit: number }>();
+  for (const b of bookings) {
+    const d = new Date(b.createdAt);
+    const key = `${monthNames[d.getMonth()]} ${d.getFullYear()}`;
+    const existing = revenueMap.get(key) || { revenue: 0, profit: 0 };
+    existing.revenue += b.salePrice;
+    existing.profit += b.profit;
+    revenueMap.set(key, existing);
+  }
+  const revenueData = Array.from(revenueMap.entries()).map(([name, data]) => ({ name, ...data }));
 
-  // 3. Leads by Source
-  const leadSourceRaw = await Lead.aggregate([
-    { $match: { ...baseFilter, ...dateFilter } },
-    { $group: { _id: "$source", value: { $sum: 1 } } },
-  ]);
-
+  const leadSourceAgg = await prisma.lead.groupBy({
+    by: ["source"],
+    where: { ...baseFilter, createdAt: { gte: startDate, lte: now } } as any,
+    _count: { id: true },
+  });
   const colors = ["#2563eb", "#16a34a", "#dc2626", "#9333ea", "#ea580c", "#0f172a"];
-  const leadSourceData = leadSourceRaw.map((d, i) => ({
-    name: d._id || "Unknown",
-    value: d.value,
+  const leadSourceData = leadSourceAgg.map((d, i) => ({
+    name: d.source || "Unknown",
+    value: d._count.id,
     color: colors[i % colors.length],
   }));
 
-  // 4. Bookings by Branch
-  const branchDataRaw = await Booking.aggregate([
-    { $match: { ...baseFilter, ...bookingDateFilter } },
-    { $group: { _id: "$branchId", bookings: { $sum: 1 } } },
-  ]);
-
-  // Map branchIds to names
-  const branches = await Branch.find({ agencyId: baseFilter.agencyId });
-  const branchMap = new Map(branches.map(b => [b._id.toString(), b.name]));
-
-  const branchData = branchDataRaw.map(d => ({
-    name: branchMap.get(d._id?.toString()) || "Unknown Branch",
-    bookings: d.bookings,
+  const branchDataAgg = await prisma.booking.groupBy({
+    by: ["branchId"],
+    where: { ...baseFilter, createdAt: { gte: startDate, lte: now } } as any,
+    _count: { id: true },
+  });
+  const branchNameMap = new Map(
+    (await prisma.branch.findMany({ where: { agencyId: baseFilter.agencyId as string } })).map((b) => [b.id, b.name])
+  );
+  const branchData = branchDataAgg.map((d) => ({
+    name: branchNameMap.get(d.branchId ?? "") || "Unknown Branch",
+    bookings: d._count.id,
   }));
 
   return {
-    kpis: {
-      totalRevenue,
-      totalProfit,
-      totalBookings,
-      profitMargin,
-    },
+    kpis: { totalRevenue, totalProfit, totalBookings, profitMargin },
     revenueData,
     leadSourceData,
     branchData,
@@ -481,12 +400,13 @@ export async function getAnalyticsStats(ctx: TenantContext, timeRange: string) {
 export async function listLeads(ctx: TenantContext, pagination?: PaginationOptions, dates?: DateFilterOptions) {
   const filter: any = tenant(ctx);
   applyDateFilter(filter, dates);
-  const query = Lead.find(filter)
-    .populate("assignedAgentId", "name email")
-    .sort({ createdAt: -1 });
 
   if (!pagination) {
-    const leads = await query.exec();
+    const leads = await prisma.lead.findMany({
+      where: filter,
+      orderBy: { createdAt: "desc" },
+      include: { assignedAgent: { select: { id: true, firstName: true, lastName: true, email: true } } },
+    });
     const data = await enrichLeadsBatch(leads);
     return { data, total: data.length, page: 1, limit: data.length, totalPages: 1 };
   }
@@ -495,63 +415,64 @@ export async function listLeads(ctx: TenantContext, pagination?: PaginationOptio
   const skip = (page - 1) * limit;
 
   const [leads, total] = await Promise.all([
-    query.skip(skip).limit(limit).exec(),
-    Lead.countDocuments(filter),
+    prisma.lead.findMany({
+      where: filter,
+      orderBy: { createdAt: "desc" },
+      skip,
+      take: limit,
+      include: { assignedAgent: { select: { id: true, firstName: true, lastName: true, email: true } } },
+    }),
+    prisma.lead.count({ where: filter }),
   ]);
 
   const data = await enrichLeadsBatch(leads);
-
   return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
 }
 
 export async function getLead(ctx: TenantContext, idOrRef: string) {
-  const lead = await Lead.findOne({ ...tenant(ctx), ...buildIdOrRefFilter(idOrRef, "leadRef") });
+  const lead = await prisma.lead.findFirst({
+    where: { ...tenant(ctx) as any, ...buildIdOrRefFilter(idOrRef, "leadRef") } as any,
+  });
   if (!lead) return null;
-  return enrichLead(lead.toObject());
+  return enrichLead(lead);
 }
 
 export async function createLead(ctx: TenantContext, values: LeadInput, actor: string) {
   const agencyId = ctx.agencyId;
   const branchId = values.branchId ?? (await getDefaultBranchId(agencyId));
   const leadRef = await generateRef("LD", agencyId);
-  const lead = await Lead.create({
-    agencyId,
-    leadRef,
-    name: values.name,
-    phone: values.phone,
-    whatsapp: values.whatsapp || undefined,
-    email: values.email || undefined,
-    destination: values.destination,
-    travelDate: values.travelDate ? new Date(values.travelDate) : undefined,
-    budget: values.budget,
-    adults: values.adults ?? 1,
-    children: values.children ?? 0,
-    specialRequirements: values.specialRequirements || undefined,
-    source: values.source,
-    status: values.status,
-    assignedAgentId: values.assignedAgentId || undefined,
-    branchId,
-    notes: values.notes || undefined,
+  const lead = await prisma.lead.create({
+    data: {
+      agencyId,
+      leadRef,
+      name: values.name,
+      phone: values.phone,
+      whatsapp: values.whatsapp || null,
+      email: values.email || null,
+      destination: values.destination,
+      travelDate: values.travelDate ? new Date(values.travelDate) : null,
+      budget: values.budget,
+      adults: values.adults ?? 1,
+      children: values.children ?? 0,
+      specialRequirements: values.specialRequirements || null,
+      source: values.source,
+      status: values.status,
+      assignedAgentId: values.assignedAgentId || null,
+      branchId,
+      notes: values.notes || null,
+    },
   });
-  if (values.notes) {
-    await LeadActivity.create({
-      agencyId,
-      leadId: lead._id,
-      type: "note",
-      description: values.notes,
-      createdBy: actor,
-    });
-  } else {
-    await LeadActivity.create({
-      agencyId,
-      leadId: lead._id,
-      type: "note",
-      description: "Lead captured",
-      createdBy: actor,
-    });
-  }
 
-  // Notify assignee if assigned
+  await prisma.leadActivity.create({
+    data: {
+      agencyId,
+      leadId: lead.id,
+      type: "note",
+      description: values.notes || "Lead captured",
+      createdBy: actor,
+    },
+  });
+
   if (values.assignedAgentId) {
     try {
       await notificationService.createNotification(ctx, {
@@ -559,7 +480,7 @@ export async function createLead(ctx: TenantContext, values: LeadInput, actor: s
         title: "New Lead Assigned",
         body: `You have been assigned a new lead: ${values.name}`,
         entityType: "lead",
-        entityId: lead._id.toString(),
+        entityId: lead.id,
         type: "info",
       });
     } catch (e) {
@@ -567,51 +488,54 @@ export async function createLead(ctx: TenantContext, values: LeadInput, actor: s
     }
   }
 
-  return enrichLead(lead.toObject());
+  return enrichLead(lead);
 }
 
 export async function updateLead(ctx: TenantContext, idOrRef: string, values: Partial<LeadInput>, actor?: string) {
-  const lead = await Lead.findOneAndUpdate(
-    { ...tenant(ctx), ...buildIdOrRefFilter(idOrRef, "leadRef") },
-    {
+  const filter = { ...tenant(ctx) as any, ...buildIdOrRefFilter(idOrRef, "leadRef") } as any;
+  const existing = await prisma.lead.findFirst({ where: filter });
+  if (!existing) return null;
+
+  const lead = await prisma.lead.update({
+    where: { id: existing.id },
+    data: {
       ...(values.name !== undefined && { name: values.name }),
       ...(values.phone !== undefined && { phone: values.phone }),
-      ...(values.whatsapp !== undefined && { whatsapp: values.whatsapp || undefined }),
-      ...(values.email !== undefined && { email: values.email || undefined }),
+      ...(values.whatsapp !== undefined && { whatsapp: values.whatsapp || null }),
+      ...(values.email !== undefined && { email: values.email || null }),
       ...(values.destination !== undefined && { destination: values.destination }),
       ...(values.travelDate !== undefined && {
-        travelDate: values.travelDate ? new Date(values.travelDate) : undefined,
+        travelDate: values.travelDate ? new Date(values.travelDate) : null,
       }),
       ...(values.budget !== undefined && { budget: values.budget }),
       ...(values.adults !== undefined && { adults: values.adults }),
       ...(values.children !== undefined && { children: values.children }),
       ...(values.specialRequirements !== undefined && {
-        specialRequirements: values.specialRequirements || undefined,
+        specialRequirements: values.specialRequirements || null,
       }),
       ...(values.source !== undefined && { source: values.source }),
       ...(values.status !== undefined && { status: values.status }),
       ...(values.assignedAgentId !== undefined && {
-        assignedAgentId: values.assignedAgentId || undefined,
+        assignedAgentId: values.assignedAgentId || null,
       }),
       ...(values.branchId !== undefined && { branchId: values.branchId }),
-      ...(values.notes !== undefined && { notes: values.notes || undefined }),
+      ...(values.notes !== undefined && { notes: values.notes || null }),
     },
-    { new: true }
-  );
-  if (!lead) return null;
+  });
 
-  // Also log the note if it's being updated
   if (values.notes) {
-    await LeadActivity.create({
-      agencyId: lead.agencyId,
-      leadId: lead._id,
-      type: "note",
-      description: values.notes,
-      createdBy: actor || "System",
+    await prisma.leadActivity.create({
+      data: {
+        agencyId: lead.agencyId,
+        leadId: lead.id,
+        type: "note",
+        description: values.notes,
+        createdBy: actor || "System",
+      },
     });
   }
 
-  return enrichLead(lead.toObject());
+  return enrichLead(lead);
 }
 
 export async function addLeadActivity(
@@ -620,20 +544,25 @@ export async function addLeadActivity(
   values: LeadActivityInput,
   actor: string
 ) {
-  const lead = await Lead.findOne({ ...tenant(ctx), ...buildIdOrRefFilter(idOrRef, "leadRef") });
-  if (!lead) throw ApiError.notFound("Lead");
-  const activity = await LeadActivity.create({
-    agencyId: ctx.agencyId,
-    leadId: lead._id,
-    type: values.type,
-    description: values.description,
-    outcome: values.outcome,
-    createdBy: actor,
+  const lead = await prisma.lead.findFirst({
+    where: { ...tenant(ctx) as any, ...buildIdOrRefFilter(idOrRef, "leadRef") } as any,
   });
-  lead.lastContactedAt = new Date();
-  await lead.save();
-
-  return toJSON(activity.toObject());
+  if (!lead) throw ApiError.notFound("Lead");
+  const activity = await prisma.leadActivity.create({
+    data: {
+      agencyId: ctx.agencyId,
+      leadId: lead.id,
+      type: values.type,
+      description: values.description,
+      outcome: values.outcome || null,
+      createdBy: actor,
+    },
+  });
+  await prisma.lead.update({
+    where: { id: lead.id },
+    data: { lastContactedAt: new Date() },
+  });
+  return activity;
 }
 
 export async function convertLead(
@@ -644,82 +573,73 @@ export async function convertLead(
   actor: string
 ) {
   const agencyId = ctx.agencyId;
-  const session = await mongoose.startSession();
-  session.startTransaction();
-  try {
-    const lead = await Lead.findOne({
-      ...tenant(ctx),
-      ...buildIdOrRefFilter(idOrRef, "leadRef"),
-    }).session(session);
-    if (!lead) throw ApiError.notFound("Lead");
-    const customer = await findOrCreateCustomerFromLeadDoc(agencyId, lead, session);
-    const branchId = values.branchId ?? String(lead.branchId);
-    const agentId = values.agentId ?? userId;
-    const bookingRef = await generateRef("BK", agencyId);
-    const amountReceived = values.amountReceived ?? 0;
-    const profit = values.salePrice - values.costPrice;
-    const profitMargin = values.salePrice > 0 ? (profit / values.salePrice) * 100 : 0;
-    const [booking] = await Booking.create(
-      [
-        {
-          agencyId,
-          bookingRef,
-          pnr: values.pnr,
-          ticketNumber: values.ticketNumber,
-          customerId: customer._id,
-          supplierId: values.supplierId,
-          branchId,
-          agentId,
-          leadId: lead._id,
-          airline: values.airline,
-          departureCity: values.departureCity,
-          arrivalCity: values.arrivalCity,
-          departureDate: values.departureDate,
-          returnDate: values.returnDate,
-          costPrice: values.costPrice,
-          salePrice: values.salePrice,
-          profit,
-          profitMargin,
-          bookingStatus: "confirmed",
-          paymentStatus: values.paymentStatus,
-          amountReceived,
-          balance: values.salePrice - amountReceived,
-          notes: values.notes,
-        },
-      ],
-      { session }
-    );
-    lead.status = "converted";
-    await lead.save({ session });
-    await LeadActivity.create(
-      [
-        {
-          agencyId,
-          leadId: lead._id,
-          type: "booking_created",
-          description: `Converted to Booking ${bookingRef}`,
-          createdBy: actor,
-        },
-      ],
-      { session }
-    );
-    await session.commitTransaction();
-    return enrichBooking(booking.toObject(), ctx);
-  } catch (err) {
-    await session.abortTransaction();
-    throw err;
-  } finally {
-    session.endSession();
-  }
+
+  const lead = await prisma.lead.findFirst({
+    where: { ...tenant(ctx) as any, ...buildIdOrRefFilter(idOrRef, "leadRef") } as any,
+  });
+  if (!lead) throw ApiError.notFound("Lead");
+
+  const customer = await findOrCreateCustomerFromLeadDoc(agencyId, lead);
+  const branchId = values.branchId ?? lead.branchId;
+  const agentId = values.agentId ?? userId;
+  const bookingRef = await generateRef("BK", agencyId);
+  const amountReceived = values.amountReceived ?? 0;
+  const profit = values.salePrice - values.costPrice;
+  const profitMargin = values.salePrice > 0 ? (profit / values.salePrice) * 100 : 0;
+
+  const booking = await prisma.$transaction(async (tx) => {
+    const b = await tx.booking.create({
+      data: {
+        agencyId,
+        bookingRef,
+        pnr: values.pnr || undefined,
+        ticketNumber: values.ticketNumber || undefined,
+        customerId: customer.id,
+        supplierId: values.supplierId,
+        branchId,
+        agentId,
+        leadId: lead.id,
+        airline: values.airline,
+        departureCity: values.departureCity,
+        arrivalCity: values.arrivalCity,
+        departureDate: new Date(values.departureDate),
+        returnDate: values.returnDate ? new Date(values.returnDate) : null,
+        costPrice: values.costPrice,
+        salePrice: values.salePrice,
+        profit,
+        profitMargin,
+        bookingStatus: "confirmed",
+        paymentStatus: values.paymentStatus,
+        amountReceived,
+        balance: values.salePrice - amountReceived,
+        notes: values.notes || null,
+      },
+    });
+
+    await tx.lead.update({
+      where: { id: lead.id },
+      data: { status: "converted" },
+    });
+
+    await tx.leadActivity.create({
+      data: {
+        agencyId,
+        leadId: lead.id,
+        type: "booking_created",
+        description: `Converted to Booking ${bookingRef}`,
+        createdBy: actor,
+      },
+    });
+
+    return b;
+  });
+
+  return enrichBooking(booking, ctx);
 }
 
 // --- Customers ---
 
-async function findOrCreateCustomerFromLeadDoc(
-  agencyId: string,
-  lead: InstanceType<typeof Lead>,
-  session?: mongoose.ClientSession
-) {
+async function findOrCreateCustomerFromLeadDoc(agencyId: string, lead: any) {
   const phoneNorm = normalizePhone(lead.phone);
   let core = phoneNorm;
   if (phoneNorm.startsWith("92")) core = phoneNorm.slice(2);
@@ -737,48 +657,48 @@ async function findOrCreateCustomerFromLeadDoc(
       `0${part1} ${part2}`
     );
   }
-  const existing = await Customer.findOne({
-    agencyId,
-    isDeleted: false,
-    phone: { $in: Array.from(new Set(variants)) },
-  }).session(session ?? null);
+  const existing = await prisma.customer.findFirst({
+    where: { agencyId, isDeleted: false, phone: { in: Array.from(new Set(variants)) } },
+  });
   if (existing) return existing;
   const parts = lead.name.trim().split(/\s+/);
   const firstName = parts[0] ?? lead.name;
   const lastName = parts.slice(1).join(" ") || firstName;
   const customerRef = await generateRef("CUS", agencyId);
-  const [customer] = await Customer.create(
-    [
-      {
-        agencyId,
-        customerRef,
-        type: "individual",
-        firstName,
-        lastName,
-        email: lead.email,
-        phone: lead.phone,
-        whatsapp: lead.whatsapp,
-      },
-    ],
-    { session }
-  );
-  return customer;
+  return prisma.customer.create({
+    data: {
+      agencyId,
+      customerRef,
+      type: "individual",
+      firstName,
+      lastName,
+      email: lead.email,
+      phone: lead.phone,
+      whatsapp: lead.whatsapp,
+      city: "N/A",
+      country: "Pakistan",
+    },
+  });
 }
 
 export async function findOrCreateCustomerFromLead(ctx: TenantContext, idOrRef: string) {
-  const lead = await Lead.findOne({ ...tenant(ctx), ...buildIdOrRefFilter(idOrRef, "leadRef") });
+  const lead = await prisma.lead.findFirst({
+    where: { ...tenant(ctx) as any, ...buildIdOrRefFilter(idOrRef, "leadRef") } as any,
+  });
   if (!lead) throw ApiError.notFound("Lead");
   const customer = await findOrCreateCustomerFromLeadDoc(ctx.agencyId, lead);
-  return enrichCustomer(customer.toObject(), ctx);
+  return enrichCustomer(customer, ctx);
 }
 
 export async function listCustomers(ctx: TenantContext, pagination?: PaginationOptions, dates?: DateFilterOptions) {
   const filter: any = tenant(ctx);
   applyDateFilter(filter, dates);
-  const query = Customer.find(filter).sort({ createdAt: -1 });
 
   if (!pagination) {
-    const customers = await query.exec();
+    const customers = await prisma.customer.findMany({
+      where: filter,
+      orderBy: { createdAt: "desc" },
+    });
     const data = await enrichCustomersBatch(customers, ctx);
     return { data, total: data.length, page: 1, limit: data.length, totalPages: 1 };
   }
@@ -787,8 +707,8 @@ export async function listCustomers(ctx: TenantContext, pagination?: PaginationO
   const skip = (page - 1) * limit;
 
   const [customers, total] = await Promise.all([
-    query.skip(skip).limit(limit).exec(),
-    Customer.countDocuments(filter),
+    prisma.customer.findMany({ where: filter, orderBy: { createdAt: "desc" }, skip, take: limit }),
+    prisma.customer.count({ where: filter }),
   ]);
 
   const data = await enrichCustomersBatch(customers, ctx);
@@ -796,127 +716,128 @@ export async function listCustomers(ctx: TenantContext, pagination?: PaginationO
 }
 
 export async function getCustomer(ctx: TenantContext, idOrRef: string) {
-  const customer = await Customer.findOne({
-    ...tenant(ctx),
-    ...buildIdOrRefFilter(idOrRef, "customerRef"),
+  const customer = await prisma.customer.findFirst({
+    where: { ...tenant(ctx) as any, ...buildIdOrRefFilter(idOrRef, "customerRef") } as any,
   });
   if (!customer) return null;
-  return enrichCustomer(customer.toObject(), ctx);
+  return enrichCustomer(customer, ctx);
 }
 
 export async function createCustomer(ctx: TenantContext, values: CustomerInput) {
   const agencyId = ctx.agencyId;
   const customerRef = await generateRef("CUS", agencyId);
-  const customer = await Customer.create({
-    agencyId,
-    customerRef,
-    type: values.type,
-    firstName: values.firstName,
-    lastName: values.lastName,
-    companyName: values.companyName,
-    businessType: values.businessType,
-    taxNumber: values.taxNumber,
-    email: values.email || undefined,
-    phone: values.phone,
-    whatsapp: values.whatsapp || undefined,
-    dateOfBirth: values.dateOfBirth ? new Date(values.dateOfBirth) : undefined,
-    gender: values.gender,
-    cnic: values.cnic || undefined,
-    passportNumber: values.passportNumber || undefined,
-    city: values.city,
-    country: values.country ?? countryForCity(values.city),
-    address: values.address,
-    emergencyContactName: values.emergencyContactName,
-    emergencyContactPhone: values.emergencyContactPhone || undefined,
-    internalNotes: values.internalNotes || undefined,
-  });
-  return enrichCustomer(customer.toObject(), ctx);
-}
-
-export async function updateCustomer(ctx: TenantContext, idOrRef: string, values: CustomerInput) {
-  const customer = await Customer.findOneAndUpdate(
-    { ...tenant(ctx), ...buildIdOrRefFilter(idOrRef, "customerRef") },
-    {
+  const customer = await prisma.customer.create({
+    data: {
+      agencyId,
+      customerRef,
       type: values.type,
       firstName: values.firstName,
       lastName: values.lastName,
-      companyName: values.companyName,
-      businessType: values.businessType,
-      taxNumber: values.taxNumber,
-      email: values.email || undefined,
+      companyName: values.companyName || null,
+      businessType: values.businessType || null,
+      taxNumber: values.taxNumber || null,
+      email: values.email || null,
       phone: values.phone,
-      whatsapp: values.whatsapp || undefined,
-      dateOfBirth: values.dateOfBirth ? new Date(values.dateOfBirth) : undefined,
-      gender: values.gender,
-      cnic: values.cnic || undefined,
-      passportNumber: values.passportNumber || undefined,
+      whatsapp: values.whatsapp || null,
+      dateOfBirth: values.dateOfBirth ? new Date(values.dateOfBirth) : null,
+      gender: values.gender || null,
+      cnic: values.cnic || null,
+      passportNumber: values.passportNumber || null,
       city: values.city,
       country: values.country ?? countryForCity(values.city),
       address: values.address,
-      emergencyContactName: values.emergencyContactName,
-      emergencyContactPhone: values.emergencyContactPhone || undefined,
-      internalNotes: values.internalNotes || undefined,
+      emergencyContactName: values.emergencyContactName || null,
+      emergencyContactPhone: values.emergencyContactPhone || null,
+      internalNotes: values.internalNotes || null,
     },
-    { new: true }
-  );
-  if (!customer) return null;
-  return enrichCustomer(customer.toObject(), ctx);
+  });
+  return enrichCustomer(customer, ctx);
+}
+
+export async function updateCustomer(ctx: TenantContext, idOrRef: string, values: CustomerInput) {
+  const filter = { ...tenant(ctx) as any, ...buildIdOrRefFilter(idOrRef, "customerRef") } as any;
+  const existing = await prisma.customer.findFirst({ where: filter });
+  if (!existing) return null;
+  const customer = await prisma.customer.update({
+    where: { id: existing.id },
+    data: {
+      type: values.type,
+      firstName: values.firstName,
+      lastName: values.lastName,
+      companyName: values.companyName || null,
+      businessType: values.businessType || null,
+      taxNumber: values.taxNumber || null,
+      email: values.email || null,
+      phone: values.phone,
+      whatsapp: values.whatsapp || null,
+      dateOfBirth: values.dateOfBirth ? new Date(values.dateOfBirth) : null,
+      gender: values.gender || null,
+      cnic: values.cnic || null,
+      passportNumber: values.passportNumber || null,
+      city: values.city,
+      country: values.country ?? countryForCity(values.city),
+      address: values.address,
+      emergencyContactName: values.emergencyContactName || null,
+      emergencyContactPhone: values.emergencyContactPhone || null,
+      internalNotes: values.internalNotes || null,
+    },
+  });
+  return enrichCustomer(customer, ctx);
 }
 
 export async function listCustomerNotes(ctx: TenantContext, customerId: string) {
-  const notes = await CustomerNote.find({ agencyId: ctx.agencyId, customerId }).sort({ createdAt: -1 });
-  return toJSONList(notes.map((n) => n.toObject()));
+  return prisma.customerNote.findMany({
+    where: { agencyId: ctx.agencyId, customerId },
+    orderBy: { createdAt: "desc" },
+  });
 }
 
-export async function createCustomerNote(
-  ctx: TenantContext,
-  customerId: string,
-  note: string,
-  actor: string
-) {
-  const customer = await Customer.findOne({ _id: customerId, ...tenant(ctx) });
+export async function createCustomerNote(ctx: TenantContext, customerId: string, note: string, actor: string) {
+  const customer = await prisma.customer.findFirst({ where: { id: customerId, ...tenant(ctx) as any } });
   if (!customer) throw ApiError.notFound("Customer");
-  const record = await CustomerNote.create({ agencyId: ctx.agencyId, customerId, note, addedBy: actor });
-  return toJSON(record.toObject());
+  return prisma.customerNote.create({
+    data: { agencyId: ctx.agencyId, customerId, note, addedBy: actor },
+  });
 }
 
 export async function deleteCustomerNote(ctx: TenantContext, noteId: string) {
-  const result = await CustomerNote.deleteOne({ _id: noteId, agencyId: ctx.agencyId });
-  return result.deletedCount > 0;
+  const result = await prisma.customerNote.deleteMany({ where: { id: noteId, agencyId: ctx.agencyId } });
+  return result.count > 0;
 }
 
 export async function listCustomerDocuments(ctx: TenantContext, customerId: string) {
-  const docs = await CustomerDocument.find({ agencyId: ctx.agencyId, customerId }).sort({ createdAt: -1 });
-  return toJSONList(docs.map((d) => d.toObject()));
+  return prisma.customerDocument.findMany({
+    where: { agencyId: ctx.agencyId, customerId },
+    orderBy: { createdAt: "desc" },
+  });
 }
 
 export async function createCustomerDocument(
   ctx: TenantContext,
   customerId: string,
-  doc: {
-    documentType: string;
-    fileName: string;
-    fileSize: number;
-    mimeType: string;
-    fileUrl: string;
-    notes?: string;
-  },
+  doc: { documentType: string; fileName: string; fileSize: number; mimeType: string; fileUrl: string; notes?: string },
   actor: string
 ) {
-  const customer = await Customer.findOne({ _id: customerId, ...tenant(ctx) });
+  const customer = await prisma.customer.findFirst({ where: { id: customerId, ...tenant(ctx) as any } });
   if (!customer) throw ApiError.notFound("Customer");
-  const record = await CustomerDocument.create({
-    agencyId: ctx.agencyId,
-    customerId,
-    ...doc,
-    uploadedBy: actor,
+  return prisma.customerDocument.create({
+    data: {
+      agencyId: ctx.agencyId,
+      customerId,
+      documentType: doc.documentType,
+      fileName: doc.fileName,
+      fileSize: doc.fileSize,
+      mimeType: doc.mimeType,
+      fileUrl: doc.fileUrl,
+      notes: doc.notes || null,
+      uploadedBy: actor,
+    },
   });
-  return toJSON(record.toObject());
 }
 
 export async function deleteCustomerDocument(ctx: TenantContext, docId: string) {
-  const result = await CustomerDocument.deleteOne({ _id: docId, agencyId: ctx.agencyId });
-  return result.deletedCount > 0;
+  const result = await prisma.customerDocument.deleteMany({ where: { id: docId, agencyId: ctx.agencyId } });
+  return result.count > 0;
 }
 
 // --- Bookings ---
@@ -924,16 +845,17 @@ export async function deleteCustomerDocument(ctx: TenantContext, docId: string) 
 export async function listBookings(ctx: TenantContext, pagination?: PaginationOptions, dates?: DateFilterOptions) {
   const filter: any = tenant(ctx);
   applyDateFilter(filter, dates);
-  const query = Booking.find(filter)
-    .populate("customerId")
-    .populate("supplierId")
-    .populate("agentId")
-    .populate("branchId")
-    .sort({ createdAt: -1 });
 
   if (!pagination) {
-    const bookings = await query.exec();
-    const data = bookings.map((b) => formatPopulatedBooking(b));
+    const bookings = await prisma.booking.findMany({
+      where: filter,
+      orderBy: { createdAt: "desc" },
+      include: { customer: true, supplier: true, agent: true, branch: true },
+    });
+    const data = bookings.map((b) => ({
+      ...b,
+      agent: b.agent ? { id: b.agent.id, name: userDisplayName(b.agent) } : undefined,
+    }));
     return { data, total: data.length, page: 1, limit: data.length, totalPages: 1 };
   }
 
@@ -941,29 +863,32 @@ export async function listBookings(ctx: TenantContext, pagination?: PaginationOp
   const skip = (page - 1) * limit;
 
   const [bookings, total] = await Promise.all([
-    query.skip(skip).limit(limit).exec(),
-    Booking.countDocuments(filter),
+    prisma.booking.findMany({
+      where: filter,
+      orderBy: { createdAt: "desc" },
+      skip,
+      take: limit,
+      include: { customer: true, supplier: true, agent: true, branch: true },
+    }),
+    prisma.booking.count({ where: filter }),
   ]);
 
-  const data = bookings.map((b) => formatPopulatedBooking(b));
+  const data = bookings.map((b) => ({
+    ...b,
+    agent: b.agent ? { id: b.agent.id, name: userDisplayName(b.agent) } : undefined,
+  }));
   return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
 }
 
 export async function getBooking(ctx: TenantContext, idOrRef: string) {
-  const booking = await Booking.findOne({
-    ...tenant(ctx),
-    ...buildIdOrRefFilter(idOrRef, "bookingRef"),
+  const booking = await prisma.booking.findFirst({
+    where: { ...tenant(ctx) as any, ...buildIdOrRefFilter(idOrRef, "bookingRef") } as any,
   });
   if (!booking) return null;
-  return enrichBooking(booking.toObject(), ctx);
+  return enrichBooking(booking, ctx);
 }
 
-export async function createBooking(
-  ctx: TenantContext,
-  values: BookingInput,
-  userId: string,
-  actor: string
-) {
+export async function createBooking(ctx: TenantContext, values: BookingInput, userId: string, actor: string) {
   const agencyId = ctx.agencyId;
   const branchId = values.branchId ?? (await getDefaultBranchId(agencyId));
   const agentId = values.agentId ?? userId;
@@ -971,64 +896,70 @@ export async function createBooking(
   const amountReceived = values.amountReceived ?? 0;
   const profit = values.salePrice - values.costPrice;
   const profitMargin = values.salePrice > 0 ? (profit / values.salePrice) * 100 : 0;
-  const booking = await Booking.create({
-    agencyId,
-    bookingRef,
-    pnr: values.pnr,
-    ticketNumber: values.ticketNumber,
-    customerId: values.customerId,
-    supplierId: values.supplierId,
-    branchId,
-    agentId,
-    leadId: values.leadId,
-    airline: values.airline,
-    departureCity: values.departureCity,
-    arrivalCity: values.arrivalCity,
-    departureDate: values.departureDate,
-    returnDate: values.returnDate,
-    costPrice: values.costPrice,
-    salePrice: values.salePrice,
-    profit,
-    profitMargin,
-    bookingStatus: "confirmed",
-    paymentStatus: values.paymentStatus,
-    amountReceived,
-    balance: values.salePrice - amountReceived,
-    notes: values.notes,
-  });
-  if (values.leadId) {
-    await Lead.findByIdAndUpdate(values.leadId, { status: "converted" });
-    await LeadActivity.create({
+
+  const booking = await prisma.booking.create({
+    data: {
       agencyId,
-      leadId: values.leadId,
-      type: "booking_created",
-      description: `Converted to Booking ${bookingRef}`,
-      createdBy: actor,
+      bookingRef,
+      pnr: values.pnr || undefined,
+      ticketNumber: values.ticketNumber || undefined,
+      customerId: values.customerId,
+      supplierId: values.supplierId,
+      branchId,
+      agentId,
+      leadId: values.leadId || undefined,
+      airline: values.airline,
+      departureCity: values.departureCity,
+      arrivalCity: values.arrivalCity,
+      departureDate: new Date(values.departureDate),
+      returnDate: values.returnDate ? new Date(values.returnDate) : null,
+      costPrice: values.costPrice,
+      salePrice: values.salePrice,
+      profit,
+      profitMargin,
+      bookingStatus: "confirmed",
+      paymentStatus: values.paymentStatus,
+      amountReceived,
+      balance: values.salePrice - amountReceived,
+      notes: values.notes || null,
+    },
+  });
+
+  if (values.leadId) {
+    await prisma.lead.update({ where: { id: values.leadId }, data: { status: "converted" } });
+    await prisma.leadActivity.create({
+      data: {
+        agencyId,
+        leadId: values.leadId,
+        type: "booking_created",
+        description: `Converted to Booking ${bookingRef}`,
+        createdBy: actor,
+      },
     });
   }
 
-  await BookingActivity.create({
-    agencyId,
-    bookingId: booking._id,
-    type: "created",
-    title: "Booking Created",
-    description: `Initial reservation made`,
-    createdBy: actor,
+  await prisma.bookingActivity.create({
+    data: {
+      agencyId,
+      bookingId: booking.id,
+      type: "created",
+      title: "Booking Created",
+      description: "Initial reservation made",
+      createdBy: actor,
+    },
   });
 
-  // Notify manager or admin about new booking
   try {
-    const manager = await User.findOne({ agencyId, branchId, role: "manager", isDeleted: false });
-    const admin = await User.findOne({ agencyId, role: "admin", isDeleted: false });
-    const recipientId = manager ? manager._id : (admin ? admin._id : null);
-
+    const manager = await prisma.user.findFirst({ where: { agencyId, branchId, role: "manager", isDeleted: false } });
+    const admin = await prisma.user.findFirst({ where: { agencyId, role: "admin", isDeleted: false } });
+    const recipientId = manager ? manager.id : admin ? admin.id : null;
     if (recipientId) {
       await notificationService.createNotification(ctx, {
-        recipientId: String(recipientId),
+        recipientId,
         title: "New Booking Created",
         body: `A new booking (${bookingRef}) has been created by ${actor}`,
         entityType: "booking",
-        entityId: booking._id.toString(),
+        entityId: booking.id,
         type: "success",
       });
     }
@@ -1036,24 +967,29 @@ export async function createBooking(
     console.error("Failed to send notification for booking", e);
   }
 
-  return enrichBooking(booking.toObject(), ctx);
+  return enrichBooking(booking, ctx);
 }
 
 export async function updateBooking(ctx: TenantContext, idOrRef: string, values: BookingInput, actor: string) {
   const amountReceived = values.amountReceived ?? 0;
   const profit = values.salePrice - values.costPrice;
   const profitMargin = values.salePrice > 0 ? (profit / values.salePrice) * 100 : 0;
-  const booking = await Booking.findOneAndUpdate(
-    { ...tenant(ctx), ...buildIdOrRefFilter(idOrRef, "bookingRef") },
-    {
+
+  const filter = { ...tenant(ctx) as any, ...buildIdOrRefFilter(idOrRef, "bookingRef") } as any;
+  const existing = await prisma.booking.findFirst({ where: filter });
+  if (!existing) return null;
+
+  const booking = await prisma.booking.update({
+    where: { id: existing.id },
+    data: {
       customerId: values.customerId,
       supplierId: values.supplierId,
       airline: values.airline,
       departureCity: values.departureCity,
       arrivalCity: values.arrivalCity,
-      departureDate: values.departureDate,
-      returnDate: values.returnDate,
-      pnr: values.pnr,
+      departureDate: new Date(values.departureDate),
+      returnDate: values.returnDate ? new Date(values.returnDate) : undefined,
+      pnr: values.pnr || undefined,
       ticketNumber: values.ticketNumber || undefined,
       costPrice: values.costPrice,
       salePrice: values.salePrice,
@@ -1062,22 +998,22 @@ export async function updateBooking(ctx: TenantContext, idOrRef: string, values:
       paymentStatus: values.paymentStatus,
       amountReceived,
       balance: values.salePrice - amountReceived,
-      notes: values.notes || undefined,
+      notes: values.notes || null,
     },
-    { new: true }
-  );
-  if (!booking) return null;
-
-  await BookingActivity.create({
-    agencyId: ctx.agencyId,
-    bookingId: booking._id,
-    type: "updated",
-    title: "Booking Updated",
-    description: `Booking details were updated`,
-    createdBy: actor,
   });
 
-  return enrichBooking(booking.toObject(), ctx);
+  await prisma.bookingActivity.create({
+    data: {
+      agencyId: ctx.agencyId,
+      bookingId: booking.id,
+      type: "updated",
+      title: "Booking Updated",
+      description: "Booking details were updated",
+      createdBy: actor,
+    },
+  });
+
+  return enrichBooking(booking, ctx);
 }
 
 // --- Suppliers ---
@@ -1085,185 +1021,169 @@ export async function updateBooking(ctx: TenantContext, idOrRef: string, values:
 export async function listSuppliers(ctx: TenantContext, pagination?: PaginationOptions, dates?: DateFilterOptions) {
   const filter: any = tenant(ctx);
   applyDateFilter(filter, dates);
-  const query = Supplier.find(filter).sort({ createdAt: -1 });
 
   if (!pagination) {
-    const suppliers = await query.exec();
-    const data = toJSONList(suppliers.map((s) => s.toObject()));
-    return { data, total: data.length, page: 1, limit: data.length, totalPages: 1 };
+    const suppliers = await prisma.supplier.findMany({ where: filter, orderBy: { createdAt: "desc" } });
+    return { data: suppliers, total: suppliers.length, page: 1, limit: suppliers.length, totalPages: 1 };
   }
 
   const { page, limit } = pagination;
   const skip = (page - 1) * limit;
-
   const [suppliers, total] = await Promise.all([
-    query.skip(skip).limit(limit).exec(),
-    Supplier.countDocuments(filter),
+    prisma.supplier.findMany({ where: filter, orderBy: { createdAt: "desc" }, skip, take: limit }),
+    prisma.supplier.count({ where: filter }),
   ]);
-
-  const data = toJSONList(suppliers.map((s) => s.toObject()));
-  return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
+  return { data: suppliers, total, page, limit, totalPages: Math.ceil(total / limit) };
 }
 
 export async function getSupplier(ctx: TenantContext, id: string) {
-  const supplier = await Supplier.findOne({ _id: id, ...tenant(ctx) });
-  return supplier ? toJSON(supplier.toObject()) : null;
+  return prisma.supplier.findFirst({ where: { id, ...tenant(ctx) as any } });
 }
 
 export async function createSupplier(ctx: TenantContext, values: SupplierInput) {
-  const supplier = await Supplier.create({
-    agencyId: ctx.agencyId,
-    name: values.name,
-    category: values.category,
-    contactPerson: values.contactPerson,
-    email: values.email || undefined,
-    phone: values.phone,
-    city: values.city,
-    country: values.country,
-    balance: 0,
-  });
-  return toJSON(supplier.toObject());
-}
-
-export async function updateSupplier(ctx: TenantContext, id: string, values: SupplierInput) {
-  const supplier = await Supplier.findOneAndUpdate(
-    { _id: id, ...tenant(ctx) },
-    {
+  return prisma.supplier.create({
+    data: {
+      agencyId: ctx.agencyId,
       name: values.name,
       category: values.category,
       contactPerson: values.contactPerson,
-      email: values.email || undefined,
+      email: values.email || null,
+      phone: values.phone,
+      city: values.city,
+      country: values.country,
+      balance: 0,
+    },
+  });
+}
+
+export async function updateSupplier(ctx: TenantContext, id: string, values: SupplierInput) {
+  const supplier = await prisma.supplier.findFirst({ where: { id, ...tenant(ctx) as any } });
+  if (!supplier) return null;
+  return prisma.supplier.update({
+    where: { id },
+    data: {
+      name: values.name,
+      category: values.category,
+      contactPerson: values.contactPerson,
+      email: values.email || null,
       phone: values.phone,
       city: values.city,
       country: values.country,
     },
-    { new: true }
-  );
-  return supplier ? toJSON(supplier.toObject()) : null;
+  });
 }
 
 // --- Branches ---
 
 export async function listBranches(ctx: TenantContext, pagination?: PaginationOptions) {
   const filter = { agencyId: ctx.agencyId, isDeleted: false };
-  const query = Branch.find(filter).sort({ name: 1 });
 
   if (!pagination) {
-    const branches = await query.exec();
-    const data = toJSONList(branches.map((b) => b.toObject()));
-    return { data, total: data.length, page: 1, limit: data.length, totalPages: 1 };
+    const branches = await prisma.branch.findMany({ where: filter, orderBy: { name: "asc" } });
+    return { data: branches, total: branches.length, page: 1, limit: branches.length, totalPages: 1 };
   }
 
   const { page, limit } = pagination;
   const skip = (page - 1) * limit;
-
   const [branches, total] = await Promise.all([
-    query.skip(skip).limit(limit).exec(),
-    Branch.countDocuments(filter),
+    prisma.branch.findMany({ where: filter, orderBy: { name: "asc" }, skip, take: limit }),
+    prisma.branch.count({ where: filter }),
   ]);
-
-  const data = toJSONList(branches.map((b) => b.toObject()));
-  return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
+  return { data: branches, total, page, limit, totalPages: Math.ceil(total / limit) };
 }
 
 export async function getBranch(ctx: TenantContext, id: string) {
-  const branch = await Branch.findOne({ _id: id, ...tenant(ctx) });
-  return branch ? toJSON(branch.toObject()) : null;
+  return prisma.branch.findFirst({ where: { id, ...tenant(ctx) as any } });
 }
 
 export async function createBranch(ctx: TenantContext, values: BranchInput) {
   const code = values.code?.trim().toUpperCase() || values.name.slice(0, 4).toUpperCase();
-  const existing = await Branch.findOne({ agencyId: ctx.agencyId, code, isDeleted: false });
+  const existing = await prisma.branch.findFirst({ where: { agencyId: ctx.agencyId, code, isDeleted: false } });
   if (existing) throw ApiError.conflict("Branch code already in use");
-  const branch = await Branch.create({
-    agencyId: ctx.agencyId,
-    name: values.name,
-    code,
-    city: values.city,
-    address: values.address || undefined,
-    phone: values.phone || undefined,
-    isHeadOffice: values.isHeadOffice ?? false,
-    status: values.status ?? "active",
-  });
-  return toJSON(branch.toObject());
-}
-
-export async function updateBranch(ctx: TenantContext, id: string, values: BranchInput) {
-  const branch = await Branch.findOneAndUpdate(
-    { _id: id, agencyId: ctx.agencyId, isDeleted: false },
-    {
+  return prisma.branch.create({
+    data: {
+      agencyId: ctx.agencyId,
       name: values.name,
+      code,
       city: values.city,
-      address: values.address || undefined,
-      phone: values.phone || undefined,
+      address: values.address || null,
+      phone: values.phone || null,
       isHeadOffice: values.isHeadOffice ?? false,
       status: values.status ?? "active",
     },
-    { new: true }
-  );
-  return branch ? toJSON(branch.toObject()) : null;
+  });
+}
+
+export async function updateBranch(ctx: TenantContext, id: string, values: BranchInput) {
+  const branch = await prisma.branch.findFirst({ where: { id, agencyId: ctx.agencyId, isDeleted: false } });
+  if (!branch) return null;
+  return prisma.branch.update({
+    where: { id },
+    data: {
+      name: values.name,
+      city: values.city,
+      address: values.address || null,
+      phone: values.phone || null,
+      isHeadOffice: values.isHeadOffice ?? false,
+      status: values.status ?? "active",
+    },
+  });
 }
 
 // --- Users ---
 
 export async function listUsers(ctx: TenantContext, pagination?: PaginationOptions) {
   const filter = { agencyId: ctx.agencyId };
-  const query = User.find(filter).sort({ createdAt: -1 }).select("-password");
 
   if (!pagination) {
-    const users = await query.exec();
-    const data = toJSONList(users.map((u) => u.toObject()));
-    return { data, total: data.length, page: 1, limit: data.length, totalPages: 1 };
+    const users = await prisma.user.findMany({ where: filter, orderBy: { createdAt: "desc" }, select: { id: true, agencyId: true, branchId: true, firstName: true, lastName: true, email: true, phone: true, role: true, status: true, avatarUrl: true, lastLoginAt: true, createdAt: true } });
+    return { data: users, total: users.length, page: 1, limit: users.length, totalPages: 1 };
   }
 
   const { page, limit } = pagination;
   const skip = (page - 1) * limit;
-
   const [users, total] = await Promise.all([
-    query.skip(skip).limit(limit).exec(),
-    User.countDocuments(filter),
+    prisma.user.findMany({ where: filter, orderBy: { createdAt: "desc" }, skip, take: limit, select: { id: true, agencyId: true, branchId: true, firstName: true, lastName: true, email: true, phone: true, role: true, status: true, avatarUrl: true, lastLoginAt: true, createdAt: true } }),
+    prisma.user.count({ where: filter }),
   ]);
-
-  const data = toJSONList(users.map((u) => u.toObject()));
-  return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
+  return { data: users, total, page, limit, totalPages: Math.ceil(total / limit) };
 }
 
 export async function getUser(ctx: TenantContext, id: string) {
-  const user = await User.findOne({ _id: id, ...tenant(ctx) });
-  return user ? toJSON(user.toObject()) : null;
+  return prisma.user.findFirst({ where: { id, ...tenant(ctx) as any }, select: { id: true, agencyId: true, branchId: true, firstName: true, lastName: true, email: true, phone: true, role: true, status: true, avatarUrl: true, lastLoginAt: true, createdAt: true } });
 }
 
 export async function listAgents(ctx: TenantContext) {
-  const agents = await User.find({ ...tenant(ctx), role: { $in: ["agent", "manager"] } }).sort({
-    firstName: 1,
+  return prisma.user.findMany({
+    where: { ...tenant(ctx) as any, role: { in: ["agent", "manager"] } },
+    orderBy: { firstName: "asc" },
+    select: { id: true, firstName: true, lastName: true, email: true, role: true },
   });
-  return toJSONList(agents.map((u) => u.toObject()));
 }
 
 export async function createUser(ctx: TenantContext, values: UserInput) {
-  const existing = await User.findOne({
-    agencyId: ctx.agencyId,
-    email: values.email.toLowerCase(),
-    isDeleted: false,
-  });
+  const existing = await prisma.user.findFirst({ where: { agencyId: ctx.agencyId, email: values.email.toLowerCase(), isDeleted: false } });
   if (existing) throw ApiError.conflict("Email already in use");
 
-  // Generate a secure random temp password if none provided
   const tempPassword = values.password ?? generateTempPassword();
+  const bcrypt = await import("bcryptjs");
+  const hashedPassword = await bcrypt.hash(tempPassword, 12);
 
-  const user = await User.create({
-    agencyId: ctx.agencyId,
-    branchId: values.branchId,
-    firstName: values.firstName,
-    lastName: values.lastName,
-    email: values.email,
-    phone: values.phone || undefined,
-    role: values.role,
-    status: values.status,
-    password: tempPassword,
+  const user = await prisma.user.create({
+    data: {
+      agencyId: ctx.agencyId,
+      branchId: values.branchId!,
+      firstName: values.firstName,
+      lastName: values.lastName,
+      email: values.email,
+      phone: values.phone || undefined,
+      role: values.role,
+      status: values.status,
+      password: hashedPassword,
+    },
   });
-  const userData = toJSON(user.toObject());
-  // Return tempPassword only on creation so admin can hand it to the user
+
+  const { password: _, ...userData } = user as any;
   return { ...userData, tempPassword: values.password ? undefined : tempPassword };
 }
 
@@ -1273,29 +1193,30 @@ function generateTempPassword(): string {
 }
 
 export async function updateUser(ctx: TenantContext, id: string, values: UserInput) {
-  // P0-8: Prevent privilege escalation — only admin can promote to admin
   if (values.role === "admin" && ctx.callerRole !== "admin") {
     throw ApiError.forbidden("Only an admin can assign the admin role");
   }
-  // Prevent users from changing their own role
   if (ctx.callerId === id && values.role && ctx.callerRole !== values.role) {
     throw ApiError.forbidden("You cannot change your own role");
   }
 
-  const user = await User.findOneAndUpdate(
-    { _id: id, ...tenant(ctx) },
-    {
+  const user = await prisma.user.findFirst({ where: { id, ...tenant(ctx) as any } });
+  if (!user) return null;
+
+  const updated = await prisma.user.update({
+    where: { id },
+    data: {
       firstName: values.firstName,
       lastName: values.lastName,
       email: values.email,
       phone: values.phone || undefined,
       role: values.role,
-      branchId: values.branchId,
+      branchId: values.branchId!,
       status: values.status,
     },
-    { new: true }
-  );
-  return user ? toJSON(user.toObject()) : null;
+    select: { id: true, agencyId: true, branchId: true, firstName: true, lastName: true, email: true, phone: true, role: true, status: true, avatarUrl: true, lastLoginAt: true, createdAt: true },
+  });
+  return updated;
 }
 
 // --- Expenses ---
@@ -1303,59 +1224,55 @@ export async function updateUser(ctx: TenantContext, id: string, values: UserInp
 export async function listExpenses(ctx: TenantContext, pagination?: PaginationOptions, dates?: DateFilterOptions) {
   const filter: any = tenant(ctx);
   applyDateFilter(filter, dates, "date");
-  const query = Expense.find(filter)
-    .sort({ date: -1 });
 
   if (!pagination) {
-    const expenses = await query.exec();
-    const data = toJSONList(expenses.map((e) => e.toObject()));
-    return { data, total: data.length, page: 1, limit: data.length, totalPages: 1 };
+    const expenses = await prisma.expense.findMany({ where: filter, orderBy: { date: "desc" } });
+    return { data: expenses, total: expenses.length, page: 1, limit: expenses.length, totalPages: 1 };
   }
 
   const { page, limit } = pagination;
   const skip = (page - 1) * limit;
-
   const [expenses, total] = await Promise.all([
-    query.skip(skip).limit(limit).exec(),
-    Expense.countDocuments(filter),
+    prisma.expense.findMany({ where: filter, orderBy: { date: "desc" }, skip, take: limit }),
+    prisma.expense.count({ where: filter }),
   ]);
-
-  const data = toJSONList(expenses.map((e) => e.toObject()));
-  return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
+  return { data: expenses, total, page, limit, totalPages: Math.ceil(total / limit) };
 }
 
 export async function getExpense(ctx: TenantContext, idOrRef: string) {
-  const expense = await Expense.findOne({
-    ...tenant(ctx),
-    ...buildIdOrRefFilter(idOrRef, "expenseRef"),
+  return prisma.expense.findFirst({
+    where: { ...tenant(ctx) as any, ...buildIdOrRefFilter(idOrRef, "expenseRef") } as any,
   });
-  return expense ? toJSON(expense.toObject()) : null;
 }
 
 export async function createExpense(ctx: TenantContext, values: ExpenseInput, userId: string) {
   const agencyId = ctx.agencyId;
   const branchId = values.branchId ?? (await getDefaultBranchId(agencyId));
   const expenseRef = await generateRef("EXP", agencyId);
-  const expense = await Expense.create({
-    agencyId,
-    branchId,
-    expenseRef,
-    title: values.title,
-    category: values.category,
-    amount: values.amount,
-    date: values.date,
-    paidTo: values.paidTo,
-    paymentMethod: values.paymentMethod,
-    notes: values.notes,
-    recordedById: userId,
+  return prisma.expense.create({
+    data: {
+      agencyId,
+      branchId,
+      expenseRef,
+      title: values.title,
+      category: values.category,
+      amount: values.amount,
+      date: values.date,
+      paidTo: values.paidTo,
+      paymentMethod: values.paymentMethod,
+      notes: values.notes,
+      recordedById: userId,
+    },
   });
-  return toJSON(expense.toObject());
 }
 
 export async function updateExpense(ctx: TenantContext, idOrRef: string, values: ExpenseInput) {
-  const expense = await Expense.findOneAndUpdate(
-    { ...tenant(ctx), ...buildIdOrRefFilter(idOrRef, "expenseRef") },
-    {
+  const filter = { ...tenant(ctx) as any, ...buildIdOrRefFilter(idOrRef, "expenseRef") } as any;
+  const existing = await prisma.expense.findFirst({ where: filter });
+  if (!existing) return null;
+  return prisma.expense.update({
+    where: { id: existing.id },
+    data: {
       title: values.title,
       category: values.category,
       amount: values.amount,
@@ -1365,42 +1282,32 @@ export async function updateExpense(ctx: TenantContext, idOrRef: string, values:
       notes: values.notes,
       ...(values.branchId && { branchId: values.branchId }),
     },
-    { new: true }
-  );
-  return expense ? toJSON(expense.toObject()) : null;
+  });
 }
 
 // --- Roles ---
 
 export async function listRoles(ctx: TenantContext) {
-  const roles = await Role.find(tenant(ctx)).sort({ name: 1 });
-  return toJSONList(roles.map((r) => r.toObject()));
+  return prisma.role.findMany({ where: tenant(ctx) as any, orderBy: { name: "asc" } });
 }
 
 export async function updateRolePermissions(ctx: TenantContext, roleId: string, permissions: string[]) {
-  const role = await Role.findOneAndUpdate(
-    { _id: roleId, ...tenant(ctx) },
-    { permissions },
-    { new: true }
-  );
-  return role ? toJSON(role.toObject()) : null;
+  const role = await prisma.role.findFirst({ where: { id: roleId, ...tenant(ctx) as any } });
+  if (!role) return null;
+  return prisma.role.update({ where: { id: roleId }, data: { permissions } });
 }
 
-export async function createRole(ctx: TenantContext, data: { name: string; description: string; permissions: string[]; color: string; textColor: string; }) {
-  const role = await Role.create({
-    agencyId: ctx.agencyId,
-    ...data,
+export async function createRole(ctx: TenantContext, data: { name: string; description: string; permissions: string[]; color: string; textColor: string }) {
+  return prisma.role.create({
+    data: { agencyId: ctx.agencyId, ...data },
   });
-  return toJSON(role.toObject());
 }
 
 export async function deleteRole(ctx: TenantContext, roleId: string) {
-  const result = await Role.findOneAndUpdate(
-    { _id: roleId, ...tenant(ctx) },
-    { isDeleted: true },
-    { new: true }
-  );
-  return result !== null;
+  const role = await prisma.role.findFirst({ where: { id: roleId, ...tenant(ctx) as any } });
+  if (!role) return false;
+  await prisma.role.update({ where: { id: roleId }, data: { isDeleted: true, deletedAt: new Date() } });
+  return true;
 }
 
 // --- Soft Deletes ---
@@ -1408,60 +1315,52 @@ export async function deleteRole(ctx: TenantContext, roleId: string) {
 const deletedAt = () => new Date();
 
 export async function deleteLead(ctx: TenantContext, idOrRef: string) {
-  const result = await Lead.findOneAndUpdate(
-    { ...tenant(ctx), ...buildIdOrRefFilter(idOrRef, "leadRef") },
-    { isDeleted: true, deletedAt: deletedAt() },
-    { new: true }
-  );
-  return result !== null;
+  const filter = { ...tenant(ctx) as any, ...buildIdOrRefFilter(idOrRef, "leadRef") } as any;
+  const existing = await prisma.lead.findFirst({ where: filter });
+  if (!existing) return false;
+  await prisma.lead.update({ where: { id: existing.id }, data: { isDeleted: true, deletedAt: deletedAt() } });
+  return true;
 }
 
 export async function deleteCustomer(ctx: TenantContext, idOrRef: string) {
-  const result = await Customer.findOneAndUpdate(
-    { ...tenant(ctx), ...buildIdOrRefFilter(idOrRef, "customerRef") },
-    { isDeleted: true, deletedAt: deletedAt() },
-    { new: true }
-  );
-  return result !== null;
+  const filter = { ...tenant(ctx) as any, ...buildIdOrRefFilter(idOrRef, "customerRef") } as any;
+  const existing = await prisma.customer.findFirst({ where: filter });
+  if (!existing) return false;
+  await prisma.customer.update({ where: { id: existing.id }, data: { isDeleted: true, deletedAt: deletedAt() } });
+  return true;
 }
 
 export async function deleteBooking(ctx: TenantContext, idOrRef: string) {
-  const result = await Booking.findOneAndUpdate(
-    { ...tenant(ctx), ...buildIdOrRefFilter(idOrRef, "bookingRef") },
-    { isDeleted: true, deletedAt: deletedAt() },
-    { new: true }
-  );
-  return result !== null;
+  const filter = { ...tenant(ctx) as any, ...buildIdOrRefFilter(idOrRef, "bookingRef") } as any;
+  const existing = await prisma.booking.findFirst({ where: filter });
+  if (!existing) return false;
+  await prisma.booking.update({ where: { id: existing.id }, data: { isDeleted: true, deletedAt: deletedAt() } });
+  return true;
 }
 
 export async function deleteSupplier(ctx: TenantContext, id: string) {
-  const result = await Supplier.findOneAndUpdate(
-    { _id: id, ...tenant(ctx) },
-    { isDeleted: true, deletedAt: deletedAt() },
-    { new: true }
-  );
-  return result !== null;
+  const supplier = await prisma.supplier.findFirst({ where: { id, ...tenant(ctx) as any } });
+  if (!supplier) return false;
+  await prisma.supplier.update({ where: { id }, data: { isDeleted: true, deletedAt: deletedAt() } });
+  return true;
 }
 
 export async function deleteExpense(ctx: TenantContext, idOrRef: string) {
-  const result = await Expense.findOneAndUpdate(
-    { ...tenant(ctx), ...buildIdOrRefFilter(idOrRef, "expenseRef") },
-    { isDeleted: true, deletedAt: deletedAt() },
-    { new: true }
-  );
-  return result !== null;
+  const filter = { ...tenant(ctx) as any, ...buildIdOrRefFilter(idOrRef, "expenseRef") } as any;
+  const existing = await prisma.expense.findFirst({ where: filter });
+  if (!existing) return false;
+  await prisma.expense.update({ where: { id: existing.id }, data: { isDeleted: true, deletedAt: deletedAt() } });
+  return true;
 }
 
 export async function deleteUser(ctx: TenantContext, id: string) {
   if (ctx.callerId === id) {
     throw ApiError.forbidden("You cannot delete your own account");
   }
-  const result = await User.findOneAndUpdate(
-    { _id: id, ...tenant(ctx) },
-    { isDeleted: true, deletedAt: deletedAt() },
-    { new: true }
-  );
-  return result !== null;
+  const user = await prisma.user.findFirst({ where: { id, ...tenant(ctx) as any } });
+  if (!user) return false;
+  await prisma.user.update({ where: { id }, data: { isDeleted: true, deletedAt: deletedAt() } });
+  return true;
 }
 
 // --- Supplier Payments ---
@@ -1471,23 +1370,26 @@ export async function recordSupplierPayment(
   supplierId: string,
   data: { amount: number; method: string; reference?: string }
 ) {
-  const supplier = await Supplier.findOne({ _id: supplierId, ...tenant(ctx) });
+  const supplier = await prisma.supplier.findFirst({ where: { id: supplierId, ...tenant(ctx) as any } });
   if (!supplier) throw ApiError.notFound("Supplier");
   if (data.amount <= 0) throw new ApiError(400, "Amount must be positive");
 
-  supplier.balance = Math.max(0, supplier.balance - data.amount);
-  await supplier.save();
-
-  // Log to RecentActivity
-  await RecentActivity.create({
-    agencyId: ctx.agencyId,
-    type: "payment",
-    title: `Payment to ${supplier.name}`,
-    detail: `PKR ${data.amount.toLocaleString()} via ${data.method}${data.reference ? ` (Ref: ${data.reference})` : ""}`,
-    createdBy: "System",
+  const updated = await prisma.supplier.update({
+    where: { id: supplierId },
+    data: { balance: Math.max(0, supplier.balance - data.amount) },
   });
 
-  return toJSON(supplier.toObject());
+  await prisma.recentActivity.create({
+    data: {
+      agencyId: ctx.agencyId,
+      type: "payment",
+      title: `Payment to ${supplier.name}`,
+      detail: `PKR ${data.amount.toLocaleString()} via ${data.method}${data.reference ? ` (Ref: ${data.reference})` : ""}`,
+      createdBy: "System",
+    },
+  });
+
+  return updated;
 }
 
 // --- Receipts (Customer Payments) ---
@@ -1495,100 +1397,129 @@ export async function recordSupplierPayment(
 export async function listReceipts(ctx: TenantContext, pagination?: PaginationOptions, dates?: DateFilterOptions) {
   const filter: any = tenant(ctx);
   applyDateFilter(filter, dates, "date");
-  const query = Receipt.find(filter)
-    .populate("customerId", "firstName lastName companyName")
-    .populate("bookingId", "bookingRef")
-    .sort({ createdAt: -1 });
-
-  let receipts;
-  let total;
-  let page = 1;
-  let limit = 0;
 
   if (!pagination) {
-    receipts = await query.exec();
-    limit = receipts.length;
-    total = receipts.length;
-  } else {
-    page = pagination.page;
-    limit = pagination.limit;
-    const skip = (page - 1) * limit;
-    [receipts, total] = await Promise.all([
-      query.skip(skip).limit(limit).exec(),
-      Receipt.countDocuments(filter),
-    ]);
+    const receipts = await prisma.receipt.findMany({
+      where: filter,
+      orderBy: { createdAt: "desc" },
+      include: { customer: { select: { firstName: true, lastName: true, companyName: true } }, booking: { select: { bookingRef: true } } },
+    });
+
+    const branchIds = [...new Set(receipts.map((r) => r.branchId).filter(Boolean))] as string[];
+    const managers = await prisma.user.findMany({
+      where: {
+        agencyId: ctx.agencyId,
+        OR: [
+          { branchId: { in: branchIds }, role: { in: ["manager", "branch_manager", "admin"] } },
+          { role: "admin" },
+        ],
+      },
+    });
+
+    const getManagerForBranch = (bId: string | null) => {
+      if (!bId) return null;
+      let mgr = managers.find((m) => m.branchId === bId && ["manager", "branch_manager", "admin"].includes(m.role));
+      if (!mgr) mgr = managers.find((m) => m.role === "admin");
+      return mgr ? { name: `${mgr.firstName} ${mgr.lastName}`, phone: mgr.phone, email: mgr.email } : null;
+    };
+
+    const data = receipts.map((r) => ({
+      ...r,
+      managerContact: getManagerForBranch(r.branchId),
+    }));
+
+    return { data, total: data.length, page: 1, limit: data.length, totalPages: 1 };
   }
 
-  const branchIds = [...new Set(receipts.map(r => r.branchId).filter(Boolean))];
-  const managers = await User.find({
-    agencyId: ctx.agencyId,
-    $or: [
-      { branchId: { $in: branchIds }, role: { $in: ["manager", "branch_manager", "admin"] } },
-      { role: "admin" }
-    ]
+  const { page, limit } = pagination;
+  const skip = (page - 1) * limit;
+  const [receipts, total] = await Promise.all([
+    prisma.receipt.findMany({
+      where: filter,
+      orderBy: { createdAt: "desc" },
+      skip,
+      take: limit,
+      include: { customer: { select: { firstName: true, lastName: true, companyName: true } }, booking: { select: { bookingRef: true } } },
+    }),
+    prisma.receipt.count({ where: filter }),
+  ]);
+
+  const branchIds = [...new Set(receipts.map((r) => r.branchId).filter(Boolean))] as string[];
+  const managers = await prisma.user.findMany({
+    where: {
+      agencyId: ctx.agencyId,
+      OR: [
+        { branchId: { in: branchIds }, role: { in: ["manager", "branch_manager", "admin"] } },
+        { role: "admin" },
+      ],
+    },
   });
 
-  const getManagerForBranch = (bId: any) => {
-    let mgr = managers.find(m => String(m.branchId) === String(bId) && ["manager", "branch_manager", "admin"].includes(m.role));
-    if (!mgr) mgr = managers.find(m => m.role === "admin");
+  const getManagerForBranch = (bId: string | null) => {
+    if (!bId) return null;
+    let mgr = managers.find((m) => m.branchId === bId && ["manager", "branch_manager", "admin"].includes(m.role));
+    if (!mgr) mgr = managers.find((m) => m.role === "admin");
     return mgr ? { name: `${mgr.firstName} ${mgr.lastName}`, phone: mgr.phone, email: mgr.email } : null;
   };
 
-  const data = toJSONList(receipts.map((r) => {
-    const obj = r.toObject() as any;
-    obj.managerContact = getManagerForBranch(r.branchId);
-    return obj;
+  const data = receipts.map((r) => ({
+    ...r,
+    managerContact: getManagerForBranch(r.branchId),
   }));
 
-  return { data, total, page, limit, totalPages: limit ? Math.ceil(total / limit) : 1 };
+  return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
 }
 
 export async function createReceipt(
   ctx: TenantContext,
-  data: {
-    bookingId: string;
-    customerId: string;
-    amount: number;
-    paymentMethod: string;
-    notes?: string;
-  },
+  data: { bookingId: string; customerId: string; amount: number; paymentMethod: string; notes?: string },
   actor: string
 ) {
   const agencyId = ctx.agencyId;
-  const booking = await Booking.findOne({ _id: data.bookingId, agencyId });
+  const booking = await prisma.booking.findFirst({ where: { id: data.bookingId, agencyId } });
   if (!booking) throw ApiError.notFound("Booking");
 
   const receiptRef = await generateRef("RCP", agencyId);
-  const receipt = await Receipt.create({
-    agencyId,
-    receiptRef,
-    bookingId: data.bookingId,
-    customerId: data.customerId,
-    amount: data.amount,
-    paymentMethod: data.paymentMethod,
-    notes: data.notes,
-    date: new Date(),
+
+  const receipt = await prisma.$transaction(async (tx) => {
+    const r = await tx.receipt.create({
+      data: {
+        agencyId,
+        receiptRef,
+        bookingId: data.bookingId,
+        customerId: data.customerId,
+        amount: data.amount,
+        paymentMethod: data.paymentMethod,
+        notes: data.notes || null,
+        date: new Date(),
+        branchId: booking.branchId,
+      },
+    });
+
+    const newAmountReceived = (booking.amountReceived || 0) + data.amount;
+    const newBalance = Math.max(0, booking.salePrice - newAmountReceived);
+    const newPaymentStatus = newBalance === 0 ? "paid" : newAmountReceived > 0 ? "partial" : booking.paymentStatus;
+
+    await tx.booking.update({
+      where: { id: data.bookingId },
+      data: {
+        amountReceived: newAmountReceived,
+        balance: newBalance,
+        paymentStatus: newPaymentStatus,
+      },
+    });
+
+    return r;
   });
 
-  // Update booking amounts
-  booking.amountReceived = (booking.amountReceived || 0) + data.amount;
-  booking.balance = Math.max(0, booking.salePrice - booking.amountReceived);
-  if (booking.balance === 0) {
-    booking.paymentStatus = "paid";
-  } else if (booking.amountReceived > 0) {
-    booking.paymentStatus = "partial";
-  }
-  await booking.save();
-
-  // Notify booking agent
   if (booking.agentId) {
     try {
       await notificationService.createNotification(ctx, {
-        recipientId: String(booking.agentId),
+        recipientId: booking.agentId,
         title: "Payment Received",
         body: `Receipt ${receiptRef} generated for Booking ${booking.bookingRef} (Amount: ${data.amount})`,
         entityType: "receipt",
-        entityId: receipt._id.toString(),
+        entityId: receipt.id,
         type: "success",
       });
     } catch (e) {
@@ -1596,33 +1527,38 @@ export async function createReceipt(
     }
   }
 
-  // Log to RecentActivity
-  const customer = await Customer.findById(data.customerId);
-  await RecentActivity.create({
-    agencyId,
-    type: "receipt",
-    title: `Payment received`,
-    detail: `PKR ${data.amount.toLocaleString()} from ${customer ? `${customer.firstName} ${customer.lastName}` : "Customer"} (${receiptRef})`,
-    createdBy: actor,
+  const customer = await prisma.customer.findUnique({ where: { id: data.customerId } });
+  await prisma.recentActivity.create({
+    data: {
+      agencyId,
+      type: "receipt",
+      title: "Payment received",
+      detail: `PKR ${data.amount.toLocaleString()} from ${customer ? `${customer.firstName} ${customer.lastName}` : "Customer"} (${receiptRef})`,
+      createdBy: actor,
+    },
   });
 
-  await BookingActivity.create({
-    agencyId,
-    bookingId: booking._id,
-    type: "payment",
-    title: "Payment Received",
-    description: `Received payment of Rs ${data.amount.toLocaleString()} via ${data.paymentMethod} (${receiptRef})`,
-    createdBy: actor,
+  await prisma.bookingActivity.create({
+    data: {
+      agencyId,
+      bookingId: booking.id,
+      type: "payment",
+      title: "Payment Received",
+      description: `Received payment of Rs ${data.amount.toLocaleString()} via ${data.paymentMethod} (${receiptRef})`,
+      createdBy: actor,
+    },
   });
 
-  return toJSON(receipt.toObject());
+  return receipt;
 }
 
 // --- Booking Documents ---
 
 export async function listBookingDocuments(ctx: TenantContext, bookingId: string) {
-  const docs = await BookingDocument.find({ agencyId: ctx.agencyId, bookingId }).sort({ createdAt: -1 });
-  return toJSONList(docs.map((d) => d.toObject()));
+  return prisma.bookingDocument.findMany({
+    where: { agencyId: ctx.agencyId, bookingId },
+    orderBy: { createdAt: "desc" },
+  });
 }
 
 export async function createBookingDocument(
@@ -1631,37 +1567,44 @@ export async function createBookingDocument(
   doc: { name: string; url: string; type: string },
   actor: string
 ) {
-  const booking = await Booking.findOne({ _id: bookingId, agencyId: ctx.agencyId });
+  const booking = await prisma.booking.findFirst({ where: { id: bookingId, agencyId: ctx.agencyId } });
   if (!booking) throw ApiError.notFound("Booking");
-  const record = await BookingDocument.create({
-    agencyId: ctx.agencyId,
-    bookingId,
-    name: doc.name,
-    url: doc.url,
-    type: doc.type,
-    uploadedBy: actor,
+
+  const record = await prisma.bookingDocument.create({
+    data: {
+      agencyId: ctx.agencyId,
+      bookingId,
+      name: doc.name,
+      url: doc.url,
+      type: doc.type,
+      uploadedBy: actor,
+    },
   });
 
-  await BookingActivity.create({
-    agencyId: ctx.agencyId,
-    bookingId: booking._id,
-    type: "document",
-    title: "Document Uploaded",
-    description: `Uploaded ${doc.name}`,
-    createdBy: actor,
+  await prisma.bookingActivity.create({
+    data: {
+      agencyId: ctx.agencyId,
+      bookingId: booking.id,
+      type: "document",
+      title: "Document Uploaded",
+      description: `Uploaded ${doc.name}`,
+      createdBy: actor,
+    },
   });
 
-  return toJSON(record.toObject());
+  return record;
 }
 
 export async function deleteBookingDocument(ctx: TenantContext, docId: string) {
-  const result = await BookingDocument.deleteOne({ _id: docId, agencyId: ctx.agencyId });
-  return result.deletedCount > 0;
+  const result = await prisma.bookingDocument.deleteMany({ where: { id: docId, agencyId: ctx.agencyId } });
+  return result.count > 0;
 }
 
 export async function getBookingActivities(ctx: TenantContext, bookingId: string) {
-  const activities = await BookingActivity.find({ agencyId: ctx.agencyId, bookingId }).sort({ createdAt: -1 });
-  return toJSONList(activities.map(a => a.toObject()));
+  return prisma.bookingActivity.findMany({
+    where: { agencyId: ctx.agencyId, bookingId },
+    orderBy: { createdAt: "desc" },
+  });
 }
 
 // --- Ledger and Statements ---
@@ -1669,9 +1612,9 @@ export async function getBookingActivities(ctx: TenantContext, bookingId: string
 export async function getCustomerLedger(ctx: TenantContext, customerId: string) {
   const filter = { agencyId: ctx.agencyId, customerId };
   const [customer, bookings, receipts] = await Promise.all([
-    Customer.findOne(filter),
-    Booking.find(filter).sort({ createdAt: 1 }),
-    Receipt.find(filter).sort({ date: 1 }),
+    prisma.customer.findFirst({ where: filter }),
+    prisma.booking.findMany({ where: filter, orderBy: { createdAt: "asc" } }),
+    prisma.receipt.findMany({ where: filter, orderBy: { date: "asc" } }),
   ]);
 
   if (!customer) throw ApiError.notFound("Customer");
@@ -1707,7 +1650,6 @@ export async function getCustomerLedger(ctx: TenantContext, customerId: string) 
 
   ledger.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
-  // Recalculate balance chronologically
   runningBalance = 0;
   for (const entry of ledger) {
     runningBalance += entry.debit;
@@ -1715,33 +1657,25 @@ export async function getCustomerLedger(ctx: TenantContext, customerId: string) 
     entry.balance = runningBalance;
   }
 
-  return {
-    customer: toJSON(customer.toObject()),
-    entries: ledger,
-    finalBalance: runningBalance,
-  };
+  return { customer, entries: ledger, finalBalance: runningBalance };
 }
 
 export async function getSupplierStatement(ctx: TenantContext, supplierId: string) {
-  const filter = { agencyId: ctx.agencyId, supplierId };
-  // Note: For suppliers, bookings are credits (we owe them), payments are debits (we paid them)
   const [supplier, bookings] = await Promise.all([
-    Supplier.findOne({ _id: supplierId, agencyId: ctx.agencyId }),
-    Booking.find(filter).sort({ createdAt: 1 }),
+    prisma.supplier.findFirst({ where: { id: supplierId, agencyId: ctx.agencyId } }),
+    prisma.booking.findMany({ where: { agencyId: ctx.agencyId, supplierId }, orderBy: { createdAt: "asc" } }),
   ]);
 
   if (!supplier) throw ApiError.notFound("Supplier");
 
-  const payments = await RecentActivity.find({
-    agencyId: ctx.agencyId,
-    type: "payment",
-    title: `Payment to ${supplier.name}`,
-  }).sort({ createdAt: 1 });
+  const payments = await prisma.recentActivity.findMany({
+    where: { agencyId: ctx.agencyId, type: "payment", title: `Payment to ${supplier.name}` },
+    orderBy: { createdAt: "asc" },
+  });
 
   const statement = [];
   let runningBalance = 0;
 
-  // Bookings (we owe supplier -> Credit)
   for (const b of bookings) {
     statement.push({
       date: b.createdAt,
@@ -1753,10 +1687,7 @@ export async function getSupplierStatement(ctx: TenantContext, supplierId: strin
     });
   }
 
-  // Payments (we paid supplier -> Debit)
   for (const p of payments) {
-    // detail is like: "PKR 1,500 via cash (Ref: 123)"
-    // We can extract amount from detail if we really want, but for now we just parse it
     const amountStr = p.detail.split(" ")[1];
     const amount = parseInt(amountStr.replace(/,/g, ""), 10) || 0;
     statement.push({
@@ -1777,11 +1708,7 @@ export async function getSupplierStatement(ctx: TenantContext, supplierId: strin
     entry.balance = runningBalance;
   }
 
-  return {
-    supplier: toJSON(supplier.toObject()),
-    entries: statement,
-    finalBalance: runningBalance,
-  };
+  return { supplier, entries: statement, finalBalance: runningBalance };
 }
 
 export { userDisplayName };

@@ -25,7 +25,7 @@ import { StatusBadge } from "@/components/shared/StatusBadge";
 import { CurrencyDisplay } from "@/components/shared/CurrencyDisplay";
 import { DataTable } from "@/components/tables/DataTable";
 import { ColumnDef } from "@tanstack/react-table";
-import { formatCurrencyPKR } from "@/lib/utils";
+import { formatCurrency } from "@/lib/utils";
 import { TableEntityLink } from "@/components/shared/TableEntityLink";
 import { DataTableRowActions } from "@/components/tables/DataTableRowActions";
 import { CustomerNotesPanel } from "@/components/customers/CustomerNotesPanel";
@@ -45,9 +45,11 @@ import { Label } from "@/components/ui/label";
 import { mapCustomerToForm } from "@/features/customers/utils/mapCustomerToForm";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { RecordPaymentDrawer } from "@/components/bookings/RecordPaymentDrawer";
+import { useBranchStore } from "@/store/branch.store";
 
 export default function CustomerDetailPage() {
   const router = useRouter();
+  const activeCurrency = useBranchStore(state => state.activeCurrency);
   const params = useParams<{ id: string }>();
   const id = params?.id;
   const [customer, setCustomer] = useState<Customer | null>(null);
@@ -151,7 +153,7 @@ export default function CustomerDetailPage() {
       header: "Amount",
       cell: ({ row }) => (
         <div className="font-semibold text-sm">
-          {formatCurrencyPKR(row.original.salePrice)}
+          {formatCurrency(row.original.salePrice, activeCurrency)}
         </div>
       ),
     },

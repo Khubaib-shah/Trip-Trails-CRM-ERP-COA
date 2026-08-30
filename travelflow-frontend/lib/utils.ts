@@ -37,13 +37,45 @@ export const formatShort = (amount: number): string => {
 }
 
 /**
- * Full PKR currency string: Rs 4,820,000 or Rs 4.8 Lac (short)
+ * Format a number in standard international shorthand (K, M, B)
+ */
+export const formatShortStandard = (amount: number): string => {
+  const abs = Math.abs(amount);
+  const sign = amount < 0 ? '-' : '';
+
+  if (abs >= 1_000_000_000) {
+    const val = abs / 1_000_000_000;
+    return `${sign}${val % 1 === 0 ? val.toFixed(0) : val.toFixed(1)}B`;
+  }
+  if (abs >= 1_000_000) {
+    const val = abs / 1_000_000;
+    return `${sign}${val % 1 === 0 ? val.toFixed(0) : val.toFixed(1)}M`;
+  }
+  if (abs >= 1_000) {
+    const val = abs / 1_000;
+    return `${sign}${val % 1 === 0 ? val.toFixed(0) : val.toFixed(1)}K`;
+  }
+  return `${sign}${abs}`;
+}
+
+/**
+ * Full currency string based on currency code
+ */
+export const formatCurrency = (amount: number, currencyCode: string = "PKR", short = false): string => {
+  const isSouthAsian = currencyCode === "PKR" || currencyCode === "INR";
+  const symbol = currencyCode === "PKR" ? "Rs" : currencyCode === "AED" ? "AED" : currencyCode;
+
+  if (short) {
+    return `${symbol} ${isSouthAsian ? formatShort(amount) : formatShortStandard(amount)}`;
+  }
+  return `${symbol} ${amount.toLocaleString(isSouthAsian ? 'en-PK' : 'en-US')}`;
+}
+
+/**
+ * Legacy formatter - delegates to formatCurrency with PKR
  */
 export const formatCurrencyPKR = (amount: number, short = false): string => {
-  if (short) {
-    return `Rs ${formatShort(amount)}`;
-  }
-  return `Rs ${formatPKR(amount)}`;
+  return formatCurrency(amount, "PKR", short);
 }
 
 export const formatDate = (date: Date | string) => {

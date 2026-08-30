@@ -3,7 +3,6 @@ import express from "express";
 import cors from "cors";
 import helmet from "helmet";
 import compression from "compression";
-import mongoSanitize from "express-mongo-sanitize";
 import hpp from "hpp";
 import morgan from "morgan";
 import cookieParser from "cookie-parser";
@@ -45,7 +44,6 @@ export function createApp() {
   app.use(express.json({ limit: "10mb" }));
   app.use(express.urlencoded({ extended: true }));
   app.use(cookieParser());
-  app.use(mongoSanitize());
   app.use(hpp());
 
   if (env.nodeEnv !== "test") {
@@ -66,4 +64,3 @@ export function createApp() {
 
   return app;
 }
-

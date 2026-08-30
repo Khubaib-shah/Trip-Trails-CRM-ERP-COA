@@ -24,7 +24,7 @@ import { StatusBadge } from "@/components/shared/StatusBadge";
 import { CurrencyDisplay } from "@/components/shared/CurrencyDisplay";
 import { DataTable } from "@/components/tables/DataTable";
 import { ColumnDef } from "@tanstack/react-table";
-import { formatCurrencyPKR } from "@/lib/utils";
+import { formatCurrency } from "@/lib/utils";
 import { DataTableRowActions } from "@/components/tables/DataTableRowActions";
 import { TableEntityLink } from "@/components/shared/TableEntityLink";
 import { SettleBalanceDrawer } from "@/components/suppliers/SettleBalanceDrawer";
@@ -41,9 +41,11 @@ import {
   mapSupplierToForm,
   supplierDefaultValues,
 } from "@/features/suppliers/utils/mapSupplierToForm";
+import { useBranchStore } from "@/store/branch.store";
 
 export default function SupplierDetailPage() {
   const router = useRouter();
+  const activeCurrency = useBranchStore(state => state.activeCurrency);
   const params = useParams<{ id: string }>();
   const id = params?.id;
   const [supplier, setSupplier] = useState<Supplier | null>(null);
@@ -146,7 +148,7 @@ export default function SupplierDetailPage() {
       header: "Payable",
       cell: ({ row }) => (
         <div className="font-semibold text-sm text-tf-danger">
-          {formatCurrencyPKR(row.original.costPrice)}
+          {formatCurrency(row.original.costPrice, activeCurrency)}
         </div>
       ),
     },
@@ -348,7 +350,7 @@ export default function SupplierDetailPage() {
                 </p>
               </div>
               <span className="text-tf-danger font-mono font-bold text-sm">
-                + {formatCurrencyPKR(85000)}
+                + {formatCurrency(85000, activeCurrency)}
               </span>
             </div>
             <div className="flex justify-between items-center p-4 border border-tf-border rounded-lg bg-tf-surface-2">
@@ -361,7 +363,7 @@ export default function SupplierDetailPage() {
                 </p>
               </div>
               <span className="text-tf-success font-mono font-bold text-sm">
-                - {formatCurrencyPKR(50000)}
+                - {formatCurrency(50000, activeCurrency)}
               </span>
             </div>
           </div>

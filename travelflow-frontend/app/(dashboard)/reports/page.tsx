@@ -14,9 +14,10 @@ import { DonutChart } from "@/components/charts/DonutChart";
 import { FormSelect } from "@/components/forms/FormField";
 import { useForm, useWatch } from "react-hook-form";
 import { Form } from "@/components/ui/form";
-import { formatCurrencyPKR } from "@/lib/utils";
+import { formatCurrency } from "@/lib/utils";
 import { ApiClient } from "@/lib/api-client";
 import { useAuthStore } from "@/store/auth.store";
+import { useBranchStore } from "@/store/branch.store";
 
 // Define the expected API response type
 interface AnalyticsResponse {
@@ -33,6 +34,7 @@ interface AnalyticsResponse {
 
 export default function ReportsPage() {
   const { user } = useAuthStore();
+  const activeCurrency = useBranchStore(state => state.activeCurrency);
   const isAdmin = user?.role === "admin";
 
   const form = useForm({
@@ -154,7 +156,7 @@ export default function ReportsPage() {
             </div>
           </div>
           <p className="text-3xl font-bold text-tf-text-primary">
-            {formatCurrencyPKR(kpis.totalRevenue, true)}
+            {formatCurrency(kpis.totalRevenue, activeCurrency, true)}
           </p>
         </div>
 
@@ -166,7 +168,7 @@ export default function ReportsPage() {
             </div>
           </div>
           <p className="text-3xl font-bold text-tf-text-primary">
-            {formatCurrencyPKR(kpis.totalProfit, true)}
+            {formatCurrency(kpis.totalProfit, activeCurrency, true)}
           </p>
         </div>
 

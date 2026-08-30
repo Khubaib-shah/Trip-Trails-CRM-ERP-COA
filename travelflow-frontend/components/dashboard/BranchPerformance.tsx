@@ -2,9 +2,11 @@
 
 import { BarChart } from "@/components/charts/BarChart";
 import { Users, TrendingUp, DollarSign, CreditCard } from "lucide-react";
-import { formatCurrencyPKR } from "@/lib/utils";
+import { formatCurrency } from "@/lib/utils";
+import { useBranchStore } from "@/store/branch.store";
 
 export function BranchPerformance({ isLoading, data }: { isLoading: boolean; data?: any[] }) {
+  const activeCurrency = useBranchStore((state) => state.activeCurrency);
   const defaultData = [
     { name: "KHI Main", code: "KHI-HQ", revenue: 4820000, profit: 820000, expenses: 320000, staff: 15, growth: 12.5 },
   ];
@@ -74,7 +76,7 @@ export function BranchPerformance({ isLoading, data }: { isLoading: boolean; dat
                       <TrendingUp className="w-3 h-3" /> Revenue
                     </span>
                     <span className="text-xs font-semibold text-tf-text-primary">
-                      {formatCurrencyPKR(branch.revenue, true)}
+                      {formatCurrency(branch.revenue, activeCurrency, true)}
                     </span>
                   </div>
                   <div className="flex flex-col gap-1">
@@ -82,7 +84,7 @@ export function BranchPerformance({ isLoading, data }: { isLoading: boolean; dat
                       <DollarSign className="w-3 h-3" /> Profit
                     </span>
                     <span className="text-xs font-semibold text-tf-success">
-                      {formatCurrencyPKR(branch.profit, true)}
+                      {formatCurrency(branch.profit, activeCurrency, true)}
                     </span>
                   </div>
                   <div className="flex flex-col gap-1">
@@ -90,7 +92,7 @@ export function BranchPerformance({ isLoading, data }: { isLoading: boolean; dat
                       <CreditCard className="w-3 h-3" /> Expenses
                     </span>
                     <span className="text-xs font-semibold text-tf-danger">
-                      {formatCurrencyPKR(branch.expenses, true)}
+                      {formatCurrency(branch.expenses, activeCurrency, true)}
                     </span>
                   </div>
                   <div className="flex flex-col gap-1">

@@ -21,6 +21,7 @@ const defaultValues: BranchFormValues = {
   city: "",
   address: "",
   phone: "",
+  currency: "PKR",
   isHeadOffice: false,
   status: "active",
 };
@@ -149,6 +150,7 @@ export default function BranchesPage() {
                       city: branch.city,
                       address: branch.address ?? "",
                       phone: branch.phone ?? "",
+                      currency: branch.currency ?? "PKR",
                       isHeadOffice: branch.isHeadOffice,
                       status: branch.status,
                     });
@@ -208,6 +210,15 @@ export default function BranchesPage() {
               type="tel"
             />
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <FormSelect
+                control={form.control}
+                name="currency"
+                label="Currency"
+                options={[
+                  { label: "Pakistani Rupee (PKR)", value: "PKR" },
+                  { label: "UAE Dirham (AED)", value: "AED" },
+                ]}
+              />
               <FormSelect
                 control={form.control}
                 name="status"

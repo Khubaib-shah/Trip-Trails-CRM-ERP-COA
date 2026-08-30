@@ -1,20 +1,8 @@
-import mongoose from "mongoose";
-import { Booking } from "../models/Booking.model";
-import { Customer } from "../models/Customer.model";
-import { Quotation } from "../models/Quotation.model";
-import { QuotationAttachment } from "../models/QuotationAttachment.model";
-import { QuotationItem } from "../models/QuotationItem.model";
-import { QuotationTax } from "../models/QuotationTax.model";
-import { QuotationVersion } from "../models/QuotationVersion.model";
-import { User } from "../models/User.model";
-import { Branch } from "../models/Agency.model";
+import { prisma } from "../lib/prisma";
 import { ApiError } from "../utils/ApiError";
-import { toJSON, toJSONList } from "../utils/serialize";
 import { generateRef, type RefPrefix } from "../utils/refGenerator";
 
-type TenantContext = {
-  agencyId: string;
-};
+type TenantContext = { agencyId: string };
 
 export type QuotationServiceQuotationInput = {
   quotationNumber?: string;
@@ -39,11 +27,9 @@ export type QuotationServiceQuotationInput = {
   termsTemplateId?: string;
   terms?: string;
   authorizedSignature?: string;
-
   customerName?: string;
   customerPhone?: string;
   customerEmail?: string;
-
   items?: Array<{
     serviceCategory: string;
     title: string;
@@ -54,13 +40,11 @@ export type QuotationServiceQuotationInput = {
     sellingPrice: number;
     sortOrder?: number;
   }>;
-
   taxes?: Array<{
     taxName: string;
     taxType: "percentage" | "fixed";
     taxValue: number;
   }>;
-
   attachments?: Array<{
     fileName: string;
     fileUrl: string;
@@ -68,162 +52,94 @@ export type QuotationServiceQuotationInput = {
   }>;
 };
 
-type CreateQuotationArgs = TenantContext & {
-  createdBy: string;
-  input: QuotationServiceQuotationInput;
-};
-
-type UpdateQuotationArgs = TenantContext & {
-  quotationId: string;
-  updatedBy: string;
-  input: Partial<QuotationServiceQuotationInput>;
-};
-
-type SetStatusArgs = TenantContext & {
-  quotationId: string;
-  status: any;
-  actorId: string;
-  changes?: string;
-};
-
-type ConvertArgs = TenantContext & {
-  quotationId: string;
-  actorId: string;
-};
+type CreateQuotationArgs = TenantContext & { createdBy: string; input: QuotationServiceQuotationInput };
+type UpdateQuotationArgs = TenantContext & { quotationId: string; updatedBy: string; input: Partial<QuotationServiceQuotationInput> };
+type SetStatusArgs = TenantContext & { quotationId: string; status: string; actorId: string; changes?: string };
+type ConvertArgs = TenantContext & { quotationId: string; actorId: string };
 
 function computeTotals(
-  items: Array<{
-    quantity: number;
-    sellingPrice: number;
-    costPrice: number;
-  }> = [],
+  items: Array<{ quantity: number; sellingPrice: number; costPrice: number }> = [],
   taxes: Array<{ taxType: "percentage" | "fixed"; taxValue: number }> = [],
   agencyFee: number,
   discount: number,
 ) {
-  const subtotal = items.reduce(
-    (sum, it) => sum + Number(it.quantity ?? 0) * Number(it.sellingPrice ?? 0),
-    0,
-  );
-
+  const subtotal = items.reduce((sum, it) => sum + Number(it.quantity ?? 0) * Number(it.sellingPrice ?? 0), 0);
   const taxTotal = taxes.reduce((sum, t) => {
-    if (t.taxType === "percentage") {
-      return sum + (subtotal * Number(t.taxValue ?? 0)) / 100;
-    }
+    if (t.taxType === "percentage") return sum + (subtotal * Number(t.taxValue ?? 0)) / 100;
     return sum + Number(t.taxValue ?? 0);
   }, 0);
-
-  const total =
-    subtotal + Number(agencyFee ?? 0) - Number(discount ?? 0) + taxTotal;
-
-  const costSubtotal = items.reduce(
-    (sum, it) => sum + Number(it.quantity ?? 0) * Number(it.costPrice ?? 0),
-    0,
-  );
-
+  const total = subtotal + Number(agencyFee ?? 0) - Number(discount ?? 0) + taxTotal;
+  const costSubtotal = items.reduce((sum, it) => sum + Number(it.quantity ?? 0) * Number(it.costPrice ?? 0), 0);
   const estimatedProfit = total - costSubtotal;
-
   return { subtotal, taxTotal, total, estimatedProfit };
 }
 
-export async function listQuotations({
-  agencyId,
-  query,
-}: TenantContext & { query: any }) {
-  const q: any = { agencyId, isDeleted: false };
-
-  if (query?.status) q.status = query.status;
-  if (query?.destination)
-    q.destination = { $regex: String(query.destination), $options: "i" };
-
+export async function listQuotations({ agencyId, query }: TenantContext & { query: any }) {
+  const where: any = { agencyId, isDeleted: false };
+  if (query?.status) where.status = query.status;
+  if (query?.destination) where.destination = { contains: String(query.destination), mode: "insensitive" };
   if (query?.startDate || query?.endDate) {
-    q.createdAt = {};
-    if (query?.startDate) q.createdAt.$gte = new Date(query.startDate);
-    if (query?.endDate) q.createdAt.$lte = new Date(query.endDate);
+    where.createdAt = {};
+    if (query?.startDate) where.createdAt.gte = new Date(query.startDate);
+    if (query?.endDate) where.createdAt.lte = new Date(query.endDate);
   }
 
   const page = Number(query?.page ?? 1);
   const limit = Math.min(Number(query?.limit ?? 20), 100);
   const skip = (page - 1) * limit;
 
-  const docs = await Quotation.find(q)
-    .populate("customerId")
-    .sort({ createdAt: -1 })
-    .skip(skip)
-    .limit(limit)
-    .lean();
+  const docs = await prisma.quotation.findMany({
+    where,
+    orderBy: { createdAt: "desc" },
+    skip,
+    take: limit,
+    include: { customer: true },
+  });
 
-  const items = toJSONList(docs).map((doc: any) => ({
+  const total = await prisma.quotation.count({ where });
+
+  const items = docs.map((doc) => ({
     ...doc,
     quotationRef: doc.quotationNumber,
     grandTotal: doc.total,
     subtotalAmount: doc.subtotal,
     taxAmount: doc.taxTotal,
-    customer: doc.customerId
-      ? toJSON(doc.customerId)
+    customer: doc.customer
+      ? doc.customer
       : doc.customerName
-        ? {
-            id: null,
-            firstName: doc.customerName.split(" ")[0] || "",
-            lastName: doc.customerName.split(" ").slice(1).join(" ") || "",
-            phone: doc.customerPhone || "",
-            email: doc.customerEmail || "",
-            _pending: true,
-          }
+        ? { id: null, firstName: doc.customerName.split(" ")[0] || "", lastName: doc.customerName.split(" ").slice(1).join(" ") || "", phone: doc.customerPhone || "", email: doc.customerEmail || "", _pending: true }
         : undefined,
   }));
 
-  return {
-    items,
-    page,
-    limit,
-    total: await Quotation.countDocuments(q),
-  };
+  return { items, page, limit, total };
 }
 
 export async function getQuotation(agencyId: string, quotationId: string) {
-  if (!mongoose.Types.ObjectId.isValid(quotationId)) {
-    throw ApiError.badRequest("Invalid quotation id");
-  }
-
-  const quotationDoc = await Quotation.findOne({
-    agencyId,
-    _id: quotationId,
-    isDeleted: false,
-  }).populate("customerId");
+  const quotationDoc = await prisma.quotation.findFirst({
+    where: { agencyId, id: quotationId, isDeleted: false },
+    include: { customer: true },
+  });
   if (!quotationDoc) return null;
 
   const [items, taxes, attachments, versions] = await Promise.all([
-    QuotationItem.find({ agencyId, quotationId, isDeleted: false })
-      .sort({ sortOrder: 1, createdAt: 1 })
-      .lean(),
-    QuotationTax.find({ agencyId, quotationId, isDeleted: false })
-      .sort({ createdAt: 1 })
-      .lean(),
-    QuotationAttachment.find({ agencyId, quotationId, isDeleted: false })
-      .sort({ createdAt: 1 })
-      .lean(),
-    QuotationVersion.find({ agencyId, quotationId, isDeleted: false })
-      .sort({ version: 1 })
-      .lean(),
+    prisma.quotationItem.findMany({ where: { agencyId, quotationId, isDeleted: false }, orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] }),
+    prisma.quotationTax.findMany({ where: { agencyId, quotationId, isDeleted: false }, orderBy: { createdAt: "asc" } }),
+    prisma.quotationAttachment.findMany({ where: { agencyId, quotationId, isDeleted: false }, orderBy: { createdAt: "asc" } }),
+    prisma.quotationVersion.findMany({ where: { agencyId, quotationId, isDeleted: false }, orderBy: { version: "asc" } }),
   ]);
 
-  const q = toJSON(quotationDoc) as any;
-
-  // Frontend contract mapping (travelflow-frontend/types/quotation.ts)
-  // Backend fields are: quotationNumber, total, subtotal, taxTotal, etc.
+  const q: any = { ...quotationDoc };
   q.quotationRef = q.quotationNumber;
   q.grandTotal = q.total;
   q.subtotalAmount = q.subtotal;
   q.taxAmount = q.taxTotal;
   q.notes = q.customerNotes;
   q.termsAndConditions = q.terms;
-  q.terms = q.terms;
-  if (quotationDoc.customerId) {
-    q.customer = toJSON(quotationDoc.customerId);
-    q.customerId = quotationDoc.customerId._id ? String(quotationDoc.customerId._id) : String(quotationDoc.customerId);
+
+  if (quotationDoc.customer) {
+    q.customer = quotationDoc.customer;
+    q.customerId = quotationDoc.customer.id;
   } else if (quotationDoc.customerName) {
-    // No real customer yet – construct a mock from stored temp details
     q.customer = {
       id: null,
       firstName: quotationDoc.customerName.split(" ")[0] || "",
@@ -234,193 +150,124 @@ export async function getQuotation(agencyId: string, quotationId: string) {
     };
   }
 
-  const mappedItems = toJSONList(items).map((it: any) => ({
-    ...it,
-    unitPrice: it.unitPrice ?? it.sellingPrice,
-    lineTotal: it.lineTotal ?? it.total,
-  }));
+  q.items = items.map((it: any) => ({ ...it, unitPrice: it.unitPrice ?? it.sellingPrice, lineTotal: it.lineTotal ?? it.total }));
+  q.taxes = taxes.map((t: any) => ({ ...t, label: t.label ?? t.taxName, value: t.value ?? t.taxValue, amount: t.amount ?? t.taxAmount }));
+  q.attachments = attachments.map((a: any) => ({ ...a, name: a.name ?? a.fileName, url: a.url ?? a.fileUrl, type: a.type ?? a.mimeType }));
+  q.versions = versions.map((v: any) => ({ ...v, versionNumber: v.version }));
 
-  const mappedTaxes = toJSONList(taxes).map((t: any) => ({
-    ...t,
-    label: t.label ?? t.taxName,
-    value: t.value ?? t.taxValue,
-    amount: t.amount ?? t.taxAmount,
-  }));
-
-  const mappedAttachments = toJSONList(attachments).map((a: any) => ({
-    ...a,
-    name: a.name ?? a.fileName,
-    url: a.url ?? a.fileUrl,
-    type: a.type ?? a.mimeType,
-  }));
-
-  const mappedVersions = toJSONList(versions).map((v: any) => ({
-    ...v,
-    versionNumber: v.version,
-  }));
-
-  return {
-    ...q,
-    items: mappedItems,
-    taxes: mappedTaxes,
-    attachments: mappedAttachments,
-    versions: mappedVersions,
-  };
+  return q;
 }
 
-export async function createQuotation({
-  agencyId,
-  createdBy,
-  input,
-}: CreateQuotationArgs) {
-  const quotationNumber =
-    input.quotationNumber?.trim() ||
-    (await generateRef("BK" as RefPrefix, agencyId));
-
+export async function createQuotation({ agencyId, createdBy, input }: CreateQuotationArgs) {
+  const quotationNumber = input.quotationNumber?.trim() || (await generateRef("BK" as RefPrefix, agencyId));
   const items = input.items ?? [];
   const taxes = input.taxes ?? [];
   const agencyFee = Number(input.agencyFee ?? 0);
   const discount = Number(input.discount ?? 0);
 
   const totals = computeTotals(
-    items.map((it) => ({
-      quantity: it.quantity,
-      sellingPrice: it.sellingPrice,
-      costPrice: it.costPrice,
-    })),
+    items.map((it) => ({ quantity: it.quantity, sellingPrice: it.sellingPrice, costPrice: it.costPrice })),
     taxes.map((t) => ({ taxType: t.taxType, taxValue: t.taxValue })),
     agencyFee,
     discount,
   );
 
-  const quotation = await Quotation.create({
-    agencyId,
-    quotationNumber,
-    title: input.title,
-    leadId: input.leadId,
-    customerId: input.customerId || undefined,
-    branchId: input.branchId,
-    consultantId: input.consultantId,
-    travelType: input.travelType,
-    destination: input.destination,
-    departureDate: input.departureDate
-      ? new Date(input.departureDate)
-      : undefined,
-    returnDate: input.returnDate ? new Date(input.returnDate) : undefined,
-    adults: Number(input.adults ?? 0),
-    children: Number(input.children ?? 0),
-    infants: Number(input.infants ?? 0),
-    currency: input.currency,
-    subtotal: totals.subtotal,
-    agencyFee,
-    discount,
-    taxTotal: totals.taxTotal,
-    total: totals.total,
-    estimatedProfit: totals.estimatedProfit,
-    status: "draft",
-    validUntil: input.validUntil ? new Date(input.validUntil) : undefined,
-    customerNotes: input.customerNotes,
-    internalNotes: input.internalNotes,
-    termsTemplateId: input.termsTemplateId,
-    terms: input.terms,
-    authorizedSignature: input.authorizedSignature,
-    // Temporary customer details (used until quotation is accepted)
-    customerName: input.customerName,
-    customerPhone: input.customerPhone,
-    customerEmail: input.customerEmail,
-    isDeleted: false,
+  const quotation = await prisma.$transaction(async (tx) => {
+    const q = await tx.quotation.create({
+      data: {
+        agencyId,
+        quotationNumber,
+        title: input.title,
+        leadId: input.leadId || null,
+        customerId: input.customerId || null,
+        branchId: input.branchId,
+        consultantId: input.consultantId,
+        travelType: input.travelType,
+        destination: input.destination,
+        departureDate: input.departureDate ? new Date(input.departureDate) : null,
+        returnDate: input.returnDate ? new Date(input.returnDate) : null,
+        adults: Number(input.adults ?? 0),
+        children: Number(input.children ?? 0),
+        infants: Number(input.infants ?? 0),
+        currency: input.currency,
+        subtotal: totals.subtotal,
+        agencyFee,
+        discount,
+        taxTotal: totals.taxTotal,
+        total: totals.total,
+        estimatedProfit: totals.estimatedProfit,
+        status: "draft",
+        validUntil: input.validUntil ? new Date(input.validUntil) : null,
+        customerNotes: input.customerNotes || null,
+        internalNotes: input.internalNotes || null,
+        termsTemplateId: input.termsTemplateId || null,
+        terms: input.terms || null,
+        authorizedSignature: input.authorizedSignature || null,
+        customerName: input.customerName || null,
+        customerPhone: input.customerPhone || null,
+        customerEmail: input.customerEmail || null,
+      },
+    });
+
+    if (items.length) {
+      await tx.quotationItem.createMany({
+        data: items.map((it, idx) => ({
+          agencyId,
+          quotationId: q.id,
+          serviceCategory: it.serviceCategory,
+          title: it.title,
+          description: it.description || null,
+          quantity: Number(it.quantity ?? 0),
+          unit: it.unit,
+          costPrice: Number(it.costPrice ?? 0),
+          sellingPrice: Number(it.sellingPrice ?? 0),
+          total: Number(it.quantity ?? 0) * Number(it.sellingPrice ?? 0),
+          sortOrder: it.sortOrder ?? idx,
+        })),
+      });
+    }
+
+    if (taxes.length) {
+      await tx.quotationTax.createMany({
+        data: taxes.map((t) => ({
+          agencyId,
+          quotationId: q.id,
+          taxName: t.taxName,
+          taxType: t.taxType,
+          taxValue: Number(t.taxValue ?? 0),
+          taxAmount: t.taxType === "percentage" ? (totals.subtotal * Number(t.taxValue ?? 0)) / 100 : Number(t.taxValue ?? 0),
+        })),
+      });
+    }
+
+    if (input.attachments?.length) {
+      await tx.quotationAttachment.createMany({
+        data: input.attachments.map((a) => ({
+          agencyId,
+          quotationId: q.id,
+          fileName: a.fileName,
+          fileUrl: a.fileUrl,
+          mimeType: a.mimeType,
+        })),
+      });
+    }
+
+    await tx.quotationVersion.create({
+      data: { agencyId, quotationId: q.id, version: 1, changes: "Created quotation", createdBy },
+    });
+
+    return q;
   });
 
-  const quotationId = String(quotation._id);
-
-  if (items.length) {
-    await QuotationItem.insertMany(
-      items.map((it, idx) => ({
-        agencyId,
-        quotationId,
-        serviceCategory: it.serviceCategory,
-        title: it.title,
-        description: it.description,
-        quantity: Number(it.quantity ?? 0),
-        unit: it.unit,
-        costPrice: Number(it.costPrice ?? 0),
-        sellingPrice: Number(it.sellingPrice ?? 0),
-        total: Number(it.quantity ?? 0) * Number(it.sellingPrice ?? 0),
-        sortOrder: it.sortOrder ?? idx,
-        isDeleted: false,
-      })),
-    );
-  }
-
-  if (taxes.length) {
-    await QuotationTax.insertMany(
-      taxes.map((t) => ({
-        agencyId,
-        quotationId,
-        taxName: t.taxName,
-        taxType: t.taxType,
-        taxValue: Number(t.taxValue ?? 0),
-        taxAmount:
-          t.taxType === "percentage"
-            ? (totals.subtotal * Number(t.taxValue ?? 0)) / 100
-            : Number(t.taxValue ?? 0),
-        isDeleted: false,
-      })),
-    );
-  }
-
-  if (input.attachments?.length) {
-    await QuotationAttachment.insertMany(
-      input.attachments.map((a) => ({
-        agencyId,
-        quotationId,
-        fileName: a.fileName,
-        fileUrl: a.fileUrl,
-        mimeType: a.mimeType,
-        isDeleted: false,
-      })),
-    );
-  }
-
-  await QuotationVersion.create({
-    agencyId,
-    quotationId,
-    version: 1,
-    changes: "Created quotation",
-    createdBy,
-    isDeleted: false,
-  });
-
-  return getQuotation(agencyId, quotationId);
+  return getQuotation(agencyId, quotation.id);
 }
 
-export async function updateQuotation({
-  agencyId,
-  quotationId,
-  updatedBy,
-  input,
-}: UpdateQuotationArgs) {
-  if (!mongoose.Types.ObjectId.isValid(quotationId)) {
-    throw ApiError.badRequest("Invalid quotation id");
-  }
-
-  const quotation = await Quotation.findOne({
-    agencyId,
-    _id: quotationId,
-    isDeleted: false,
-  });
+export async function updateQuotation({ agencyId, quotationId, updatedBy, input }: UpdateQuotationArgs) {
+  const quotation = await prisma.quotation.findFirst({ where: { agencyId, id: quotationId, isDeleted: false } });
   if (!quotation) return null;
 
-  const existingItems = await QuotationItem.find({
-    agencyId,
-    quotationId,
-    isDeleted: false,
-  }).lean();
-  const existingTaxes = await QuotationTax.find({
-    agencyId,
-    quotationId,
-    isDeleted: false,
-  }).lean();
+  const existingItems = await prisma.quotationItem.findMany({ where: { agencyId, quotationId, isDeleted: false } });
+  const existingTaxes = await prisma.quotationTax.findMany({ where: { agencyId, quotationId, isDeleted: false } });
 
   const nextItems = (input.items ?? existingItems).map((it: any) => ({
     serviceCategory: it.serviceCategory,
@@ -443,304 +290,207 @@ export async function updateQuotation({
   const discount = Number(input.discount ?? quotation.discount ?? 0);
 
   const totals = computeTotals(
-    nextItems.map((it) => ({
-      quantity: it.quantity,
-      sellingPrice: it.sellingPrice,
-      costPrice: it.costPrice,
-    })),
+    nextItems.map((it) => ({ quantity: it.quantity, sellingPrice: it.sellingPrice, costPrice: it.costPrice })),
     nextTaxes.map((t) => ({ taxType: t.taxType, taxValue: t.taxValue })),
     agencyFee,
     discount,
   );
 
-  quotation.set({
-    quotationNumber: input.quotationNumber?.trim()
-      ? input.quotationNumber.trim()
-      : quotation.quotationNumber,
-    leadId: input.leadId ?? quotation.leadId,
-    customerId: input.customerId || quotation.customerId,
-    customerName: input.customerName ?? quotation.customerName,
-    customerPhone: input.customerPhone ?? quotation.customerPhone,
-    customerEmail: input.customerEmail ?? quotation.customerEmail,
-    branchId: input.branchId ?? quotation.branchId,
-    consultantId: input.consultantId ?? quotation.consultantId,
-    travelType: input.travelType ?? quotation.travelType,
-    destination: input.destination ?? quotation.destination,
-    departureDate: input.departureDate
-      ? new Date(input.departureDate)
-      : quotation.departureDate,
-    returnDate: input.returnDate
-      ? new Date(input.returnDate)
-      : quotation.returnDate,
-    adults: input.adults ?? quotation.adults,
-    children: input.children ?? quotation.children,
-    infants: input.infants ?? quotation.infants,
-    currency: input.currency ?? quotation.currency,
-    subtotal: totals.subtotal,
-    agencyFee,
-    discount,
-    taxTotal: totals.taxTotal,
-    total: totals.total,
-    estimatedProfit: totals.estimatedProfit,
-    validUntil: input.validUntil
-      ? new Date(input.validUntil)
-      : quotation.validUntil,
-    customerNotes: input.customerNotes ?? quotation.customerNotes,
-    internalNotes: input.internalNotes ?? quotation.internalNotes,
-    termsTemplateId: input.termsTemplateId ?? quotation.termsTemplateId,
-    terms: input.terms ?? quotation.terms,
-    authorizedSignature:
-      input.authorizedSignature ?? quotation.authorizedSignature,
-  });
+  let customerId = input.customerId || quotation.customerId;
 
-  // If status is being changed to "accepted" and no real customer, auto-create one
   const incomingStatus = (input as any).status;
-  if (
-    incomingStatus === "accepted" &&
-    !quotation.customerId &&
-    quotation.customerName
-  ) {
+  if (incomingStatus === "accepted" && !customerId && quotation.customerName) {
     const customer = await createCustomerFromQuotation(agencyId, quotation);
-    quotation.customerId = customer._id as any;
+    customerId = customer.id;
   }
 
-  await quotation.save();
+  await prisma.$transaction(async (tx) => {
+    await tx.quotation.update({
+      where: { id: quotationId },
+      data: {
+        quotationNumber: input.quotationNumber?.trim() ? input.quotationNumber.trim() : quotation.quotationNumber,
+        leadId: input.leadId ?? quotation.leadId,
+        customerId,
+        customerName: input.customerName ?? quotation.customerName,
+        customerPhone: input.customerPhone ?? quotation.customerPhone,
+        customerEmail: input.customerEmail ?? quotation.customerEmail,
+        branchId: input.branchId ?? quotation.branchId,
+        consultantId: input.consultantId ?? quotation.consultantId,
+        travelType: input.travelType ?? quotation.travelType,
+        destination: input.destination ?? quotation.destination,
+        departureDate: input.departureDate ? new Date(input.departureDate) : quotation.departureDate,
+        returnDate: input.returnDate ? new Date(input.returnDate) : quotation.returnDate,
+        adults: input.adults ?? quotation.adults,
+        children: input.children ?? quotation.children,
+        infants: input.infants ?? quotation.infants,
+        currency: input.currency ?? quotation.currency,
+        subtotal: totals.subtotal,
+        agencyFee,
+        discount,
+        taxTotal: totals.taxTotal,
+        total: totals.total,
+        estimatedProfit: totals.estimatedProfit,
+        validUntil: input.validUntil ? new Date(input.validUntil) : quotation.validUntil,
+        customerNotes: input.customerNotes ?? quotation.customerNotes,
+        internalNotes: input.internalNotes ?? quotation.internalNotes,
+        termsTemplateId: input.termsTemplateId ?? quotation.termsTemplateId,
+        terms: input.terms ?? quotation.terms,
+        authorizedSignature: input.authorizedSignature ?? quotation.authorizedSignature,
+      },
+    });
 
-  if (input.items) {
-    await QuotationItem.updateMany(
-      { agencyId, quotationId },
-      { $set: { isDeleted: true } },
-    );
-    await QuotationItem.insertMany(
-      nextItems.map((it, idx) => ({
-        agencyId,
-        quotationId,
-        serviceCategory: it.serviceCategory,
-        title: it.title,
-        description: it.description,
-        quantity: it.quantity,
-        unit: it.unit,
-        costPrice: it.costPrice,
-        sellingPrice: it.sellingPrice,
-        total: it.quantity * it.sellingPrice,
-        sortOrder: it.sortOrder ?? idx,
-        isDeleted: false,
-      })),
-    );
-  }
+    if (input.items) {
+      await tx.quotationItem.updateMany({ where: { agencyId, quotationId }, data: { isDeleted: true, deletedAt: new Date() } });
+      await tx.quotationItem.createMany({
+        data: nextItems.map((it, idx) => ({
+          agencyId,
+          quotationId,
+          serviceCategory: it.serviceCategory,
+          title: it.title,
+          description: it.description,
+          quantity: it.quantity,
+          unit: it.unit,
+          costPrice: it.costPrice,
+          sellingPrice: it.sellingPrice,
+          total: it.quantity * it.sellingPrice,
+          sortOrder: it.sortOrder ?? idx,
+        })),
+      });
+    }
 
-  if (input.taxes) {
-    await QuotationTax.updateMany(
-      { agencyId, quotationId },
-      { $set: { isDeleted: true } },
-    );
-    await QuotationTax.insertMany(
-      nextTaxes.map((t) => ({
-        agencyId,
-        quotationId,
-        taxName: t.taxName,
-        taxType: t.taxType,
-        taxValue: t.taxValue,
-        taxAmount:
-          t.taxType === "percentage"
-            ? (totals.subtotal * t.taxValue) / 100
-            : t.taxValue,
-        isDeleted: false,
-      })),
-    );
-  }
+    if (input.taxes) {
+      await tx.quotationTax.updateMany({ where: { agencyId, quotationId }, data: { isDeleted: true, deletedAt: new Date() } });
+      await tx.quotationTax.createMany({
+        data: nextTaxes.map((t) => ({
+          agencyId,
+          quotationId,
+          taxName: t.taxName,
+          taxType: t.taxType,
+          taxValue: t.taxValue,
+          taxAmount: t.taxType === "percentage" ? (totals.subtotal * t.taxValue) / 100 : t.taxValue,
+        })),
+      });
+    }
 
-  if (input.attachments) {
-    await QuotationAttachment.updateMany(
-      { agencyId, quotationId },
-      { $set: { isDeleted: true } },
-    );
-    await QuotationAttachment.insertMany(
-      input.attachments.map((a) => ({
-        agencyId,
-        quotationId,
-        fileName: a.fileName,
-        fileUrl: a.fileUrl,
-        mimeType: a.mimeType,
-        isDeleted: false,
-      })),
-    );
-  }
+    if (input.attachments) {
+      await tx.quotationAttachment.updateMany({ where: { agencyId, quotationId }, data: { isDeleted: true, deletedAt: new Date() } });
+      await tx.quotationAttachment.createMany({
+        data: input.attachments.map((a) => ({
+          agencyId,
+          quotationId,
+          fileName: a.fileName,
+          fileUrl: a.fileUrl,
+          mimeType: a.mimeType,
+        })),
+      });
+    }
 
-  const latest = await QuotationVersion.findOne({
-    agencyId,
-    quotationId,
-    isDeleted: false,
-  })
-    .sort({ version: -1 })
-    .lean();
-
-  await QuotationVersion.create({
-    agencyId,
-    quotationId,
-    version: (latest?.version ?? 0) + 1,
-    changes: "Updated quotation",
-    createdBy: updatedBy,
-    isDeleted: false,
+    const latest = await tx.quotationVersion.findFirst({ where: { agencyId, quotationId, isDeleted: false }, orderBy: { version: "desc" } });
+    await tx.quotationVersion.create({
+      data: { agencyId, quotationId, version: (latest?.version ?? 0) + 1, changes: "Updated quotation", createdBy: updatedBy },
+    });
   });
 
   return getQuotation(agencyId, quotationId);
 }
 
-/**
- * Helper: create a Customer record from the temporary customer details
- * stored on a Quotation. Called automatically when quotation is accepted
- * or converted to a booking.
- */
 async function createCustomerFromQuotation(agencyId: string, quotation: any) {
   const nameParts = (quotation.customerName || "").trim().split(" ");
   const firstName = nameParts[0] || "Unknown";
   const lastName = nameParts.slice(1).join(" ") || " ";
-
   const customerRef = await generateRef("CU" as RefPrefix, agencyId);
-
-  const customer = await Customer.create({
-    agencyId,
-    customerRef,
-    type: "individual",
-    firstName,
-    lastName,
-    phone: quotation.customerPhone || "N/A",
-    email: quotation.customerEmail || undefined,
-    city: "N/A",
-    status: "active",
-    isDeleted: false,
+  return prisma.customer.create({
+    data: {
+      agencyId,
+      customerRef,
+      type: "individual",
+      firstName,
+      lastName,
+      phone: quotation.customerPhone || "N/A",
+      email: quotation.customerEmail || null,
+      city: "N/A",
+    },
   });
-
-  return customer;
 }
 
-export async function setQuotationStatus({
-  agencyId,
-  quotationId,
-  status,
-  actorId,
-  changes,
-}: SetStatusArgs) {
-  const quotation = await Quotation.findOne({
-    agencyId,
-    _id: quotationId,
-    isDeleted: false,
-  });
+export async function setQuotationStatus({ agencyId, quotationId, status, actorId, changes }: SetStatusArgs) {
+  const quotation = await prisma.quotation.findFirst({ where: { agencyId, id: quotationId, isDeleted: false } });
   if (!quotation) return null;
 
-  // Auto-create customer when quotation is accepted and no customer exists yet
-  if (status === "accepted" && !quotation.customerId && quotation.customerName) {
+  let customerId = quotation.customerId;
+  if (status === "accepted" && !customerId && quotation.customerName) {
     const customer = await createCustomerFromQuotation(agencyId, quotation);
-    quotation.customerId = customer._id as any;
+    customerId = customer.id;
   }
 
-  quotation.status = status;
-  await quotation.save();
+  await prisma.quotation.update({ where: { id: quotationId }, data: { status, customerId } });
 
-  const latest = await QuotationVersion.find({
-    agencyId,
-    quotationId,
-    isDeleted: false,
-  })
-    .sort({ version: -1 })
-    .limit(1)
-    .lean();
+  const latest = await prisma.quotationVersion.findFirst({
+    where: { agencyId, quotationId, isDeleted: false },
+    orderBy: { version: "desc" },
+  });
 
-  const nextVersion = (latest[0]?.version ?? 0) + 1;
-
-  await QuotationVersion.create({
-    agencyId,
-    quotationId,
-    version: nextVersion,
-    changes: changes ?? `Status changed to ${status}`,
-    createdBy: actorId,
-    isDeleted: false,
+  await prisma.quotationVersion.create({
+    data: { agencyId, quotationId, version: (latest?.version ?? 0) + 1, changes: changes ?? `Status changed to ${status}`, createdBy: actorId },
   });
 
   return getQuotation(agencyId, quotationId);
 }
 
-export async function convertQuotationToBooking({
-  agencyId,
-  quotationId,
-  actorId,
-}: ConvertArgs) {
-  const quotation = await Quotation.findOne({
-    agencyId,
-    _id: quotationId,
-    isDeleted: false,
-  });
+export async function convertQuotationToBooking({ agencyId, quotationId }: ConvertArgs) {
+  const quotation = await prisma.quotation.findFirst({ where: { agencyId, id: quotationId, isDeleted: false } });
   if (!quotation) return null;
 
   if (!quotation.branchId || !quotation.consultantId) {
-    throw ApiError.badRequest(
-      "Quotation missing required fields for conversion",
-    );
+    throw ApiError.badRequest("Quotation missing required fields for conversion");
   }
 
-  // Auto-create customer if not yet linked
-  if (!quotation.customerId) {
+  let customerId = quotation.customerId;
+  if (!customerId) {
     if (!quotation.customerName) {
-      throw ApiError.badRequest(
-        "Quotation has no customer information for conversion",
-      );
+      throw ApiError.badRequest("Quotation has no customer information for conversion");
     }
     const customer = await createCustomerFromQuotation(agencyId, quotation);
-    quotation.customerId = customer._id as any;
-    await quotation.save();
+    customerId = customer.id;
   }
 
   const bookingRef = await generateRef("BK" as RefPrefix, agencyId);
 
-  const booking = await Booking.create({
-    agencyId,
-    bookingRef,
-    pnr: "",
-    ticketNumber: undefined,
-    customerId: quotation.customerId,
-    supplierId: new mongoose.Types.ObjectId(quotation.consultantId),
-    branchId: quotation.branchId,
-    agentId: quotation.consultantId,
-    leadId: quotation.leadId,
-    airline: quotation.travelType,
-    departureCity: quotation.destination,
-    arrivalCity: quotation.destination,
-    departureDate: quotation.departureDate ?? new Date(),
-    returnDate: quotation.returnDate,
-    costPrice: 0,
-    salePrice: quotation.total,
-    profit: quotation.estimatedProfit,
-    profitMargin:
-      quotation.total > 0
-        ? (quotation.estimatedProfit / quotation.total) * 100
-        : 0,
-    bookingStatus: "confirmed",
-    paymentStatus: "unpaid",
-    amountReceived: 0,
-    balance: quotation.total,
-    notes: quotation.customerNotes,
-    isDeleted: false,
+  const booking = await prisma.booking.create({
+    data: {
+      agencyId,
+      bookingRef,
+      pnr: "",
+      customerId,
+      supplierId: quotation.consultantId,
+      branchId: quotation.branchId,
+      agentId: quotation.consultantId,
+      leadId: quotation.leadId || null,
+      airline: quotation.travelType,
+      departureCity: quotation.destination,
+      arrivalCity: quotation.destination,
+      departureDate: quotation.departureDate ?? new Date(),
+      returnDate: quotation.returnDate,
+      costPrice: 0,
+      salePrice: quotation.total,
+      profit: quotation.estimatedProfit,
+      profitMargin: quotation.total > 0 ? (quotation.estimatedProfit / quotation.total) * 100 : 0,
+      bookingStatus: "confirmed",
+      paymentStatus: "unpaid",
+      amountReceived: 0,
+      balance: quotation.total,
+      notes: quotation.customerNotes,
+    },
   });
 
-  void actorId;
-
-  return toJSON(booking);
+  return booking;
 }
 
-export async function getQuotationVersions(
-  agencyId: string,
-  quotationId: string,
-) {
-  const docs = await QuotationVersion.find({
-    agencyId,
-    quotationId,
-    isDeleted: false,
-  })
-    .sort({ version: -1 })
-    .lean();
-
-  return toJSONList(docs);
+export async function getQuotationVersions(agencyId: string, quotationId: string) {
+  return prisma.quotationVersion.findMany({
+    where: { agencyId, quotationId, isDeleted: false },
+    orderBy: { version: "desc" },
+  });
 }
 
 export async function getQuotationForPrint(agencyId: string, id: string) {
@@ -748,23 +498,19 @@ export async function getQuotationForPrint(agencyId: string, id: string) {
   if (!quotation) return null;
 
   let branchManager: any = null;
-  const creator = await User.findById(quotation.consultantId);
+  const creator = await prisma.user.findUnique({ where: { id: quotation.consultantId } });
 
   if (creator) {
     if (creator.role === "admin" || creator.role === "owner") {
-      const headBranch = await Branch.findOne({ agencyId, isHeadOffice: true });
+      const headBranch = await prisma.branch.findFirst({ where: { agencyId, isHeadOffice: true } });
       if (headBranch) {
-        branchManager = await User.findOne({
-          agencyId,
-          branchId: headBranch._id,
-          role: { $in: ["manager", "branch_manager", "admin"] },
+        branchManager = await prisma.user.findFirst({
+          where: { agencyId, branchId: headBranch.id, role: { in: ["manager", "branch_manager", "admin"] } },
         });
       }
     } else {
-      branchManager = await User.findOne({
-        agencyId,
-        branchId: creator.branchId,
-        role: { $in: ["manager", "branch_manager"] },
+      branchManager = await prisma.user.findFirst({
+        where: { agencyId, branchId: creator.branchId, role: { in: ["manager", "branch_manager"] } },
       });
     }
   }
@@ -776,11 +522,7 @@ export async function getQuotationForPrint(agencyId: string, id: string) {
   return {
     ...quotation,
     managerContact: branchManager
-      ? {
-          name: `${branchManager.firstName} ${branchManager.lastName}`,
-          phone: branchManager.phone,
-          email: branchManager.email,
-        }
+      ? { name: `${branchManager.firstName} ${branchManager.lastName}`, phone: branchManager.phone, email: branchManager.email }
       : null,
   };
 }

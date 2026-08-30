@@ -1,36 +1,50 @@
 import { Request, Response, NextFunction } from "express";
-import { User, TokenBlacklist } from "../models";
+import { prisma } from "../lib/prisma";
 import { ApiError } from "../utils/ApiError";
 import { verifyToken } from "../utils/jwt";
 
 export async function authMiddleware(req: Request, _res: Response, next: NextFunction) {
   try {
-    // Read access token from HttpOnly cookie
     const token = req.cookies?.tf_access_token as string | undefined;
 
     if (!token) {
       throw ApiError.unauthorized("Authentication required");
     }
 
-    const isBlacklisted = await TokenBlacklist.exists({ token });
+    const isBlacklisted = await prisma.tokenBlacklist.findUnique({ where: { token } });
     if (isBlacklisted) {
       throw ApiError.unauthorized("Token has been revoked");
     }
 
     const payload = verifyToken(token);
-    const user = await User.findOne({
-      _id: payload.userId,
-      agencyId: payload.agencyId,
-      isDeleted: false,
-      status: "active",
+    const user = await prisma.user.findFirst({
+      where: {
+        id: payload.userId,
+        agencyId: payload.agencyId,
+        isDeleted: false,
+        status: "active",
+      },
+      select: {
+        id: true,
+        agencyId: true,
+        branchId: true,
+        firstName: true,
+        lastName: true,
+        email: true,
+        role: true,
+        status: true,
+        phone: true,
+        avatarUrl: true,
+        lastLoginAt: true,
+      },
     });
 
     if (!user) {
       throw ApiError.unauthorized("Invalid or expired token");
     }
 
-    req.user = user;
-    req.agencyId = String(user.agencyId);
+    (req as any).user = user;
+    req.agencyId = user.agencyId;
     next();
   } catch (err) {
     if (err instanceof ApiError) {
@@ -40,4 +54,3 @@ export async function authMiddleware(req: Request, _res: Response, next: NextFun
     next(ApiError.unauthorized("Invalid or expired token"));
   }
 }
-

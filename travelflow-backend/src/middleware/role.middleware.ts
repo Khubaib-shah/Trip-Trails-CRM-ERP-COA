@@ -1,9 +1,8 @@
 import { Request, Response, NextFunction } from "express";
 import { ApiError } from "../utils/ApiError";
-import type { UserRole } from "../models/User.model";
-import { Role } from "../models/Role.model";
+import { prisma } from "../lib/prisma";
 
-export function requireRole(allowedRoles: UserRole[]) {
+export function requireRole(allowedRoles: string[]) {
   return (req: Request, _res: Response, next: NextFunction) => {
     if (!req.user) {
       return next(ApiError.unauthorized());
@@ -21,18 +20,19 @@ export function requirePermission(requiredPermission: string) {
       if (!req.user || !req.agencyId) {
         return next(ApiError.unauthorized());
       }
-      // If user is admin, allow all by default
       if (req.user.role === "admin") {
         return next();
       }
 
-      // Fetch the role for this user
-      const role = await Role.findOne({ agencyId: req.agencyId, name: req.user.role });
+      const role = await prisma.role.findFirst({
+        where: { agencyId: req.agencyId, name: req.user.role, isDeleted: false },
+      });
       if (!role) {
         return next(ApiError.forbidden("Role not found"));
       }
 
-      if (!role.permissions.includes(requiredPermission)) {
+      const permissions = role.permissions as string[];
+      if (!permissions.includes(requiredPermission)) {
         return next(ApiError.forbidden(`Requires permission: ${requiredPermission}`));
       }
 

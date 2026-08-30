@@ -1,5 +1,4 @@
-import { Notification } from "../models/Notification.model";
-import { TenantContext, PaginationOptions } from "./domain.service";
+import { prisma } from "../lib/prisma";
 import { ApiError } from "../utils/ApiError";
 
 export interface CreateNotificationInput {
@@ -12,18 +11,29 @@ export interface CreateNotificationInput {
   branchId?: string;
 }
 
+export interface TenantContext {
+  agencyId: string;
+  branchId?: string;
+}
+
+export interface PaginationOptions {
+  page: number;
+  limit: number;
+}
+
 export async function createNotification(ctx: TenantContext, input: CreateNotificationInput) {
-  const notification = await Notification.create({
-    agencyId: ctx.agencyId,
-    branchId: input.branchId || ctx.branchId,
-    recipientId: input.recipientId,
-    type: input.type || "info",
-    title: input.title,
-    body: input.body,
-    entityType: input.entityType,
-    entityId: input.entityId,
+  return prisma.notification.create({
+    data: {
+      agencyId: ctx.agencyId,
+      branchId: input.branchId || ctx.branchId || null,
+      recipientId: input.recipientId,
+      type: input.type || "info",
+      title: input.title,
+      body: input.body,
+      entityType: input.entityType || null,
+      entityId: input.entityId || null,
+    },
   });
-  return notification;
 }
 
 export async function listNotifications(
@@ -31,11 +41,13 @@ export async function listNotifications(
   userId: string,
   pagination?: PaginationOptions
 ) {
-  const filter = { agencyId: ctx.agencyId, recipientId: userId };
-  const query = Notification.find(filter).sort({ isRead: 1, createdAt: -1 });
+  const where = { agencyId: ctx.agencyId, recipientId: userId };
 
   if (!pagination) {
-    const data = await query.exec();
+    const data = await prisma.notification.findMany({
+      where,
+      orderBy: [{ isRead: "asc" }, { createdAt: "desc" }],
+    });
     return { data, total: data.length, page: 1, limit: data.length, totalPages: 1 };
   }
 
@@ -43,37 +55,42 @@ export async function listNotifications(
   const skip = (page - 1) * limit;
 
   const [data, total] = await Promise.all([
-    query.skip(skip).limit(limit).exec(),
-    Notification.countDocuments(filter),
+    prisma.notification.findMany({
+      where,
+      orderBy: [{ isRead: "asc" }, { createdAt: "desc" }],
+      skip,
+      take: limit,
+    }),
+    prisma.notification.count({ where }),
   ]);
 
   return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
 }
 
 export async function markAsRead(ctx: TenantContext, userId: string, notificationId: string) {
-  const notification = await Notification.findOneAndUpdate(
-    { _id: notificationId, agencyId: ctx.agencyId, recipientId: userId },
-    { isRead: true },
-    { new: true }
-  );
+  const notification = await prisma.notification.findFirst({
+    where: { id: notificationId, agencyId: ctx.agencyId, recipientId: userId },
+  });
   if (!notification) throw ApiError.notFound("Notification");
-  return notification;
+  return prisma.notification.update({
+    where: { id: notificationId },
+    data: { isRead: true },
+  });
 }
 
 export async function markAllAsRead(ctx: TenantContext, userId: string) {
-  await Notification.updateMany(
-    { agencyId: ctx.agencyId, recipientId: userId, isRead: false },
-    { isRead: true }
-  );
+  await prisma.notification.updateMany({
+    where: { agencyId: ctx.agencyId, recipientId: userId, isRead: false },
+    data: { isRead: true },
+  });
   return { success: true };
 }
 
 export async function deleteNotification(ctx: TenantContext, userId: string, notificationId: string) {
-  const result = await Notification.deleteOne({
-    _id: notificationId,
-    agencyId: ctx.agencyId,
-    recipientId: userId,
+  const notification = await prisma.notification.findFirst({
+    where: { id: notificationId, agencyId: ctx.agencyId, recipientId: userId },
   });
-  if (result.deletedCount === 0) throw ApiError.notFound("Notification");
+  if (!notification) throw ApiError.notFound("Notification");
+  await prisma.notification.delete({ where: { id: notificationId } });
   return { deleted: true };
 }

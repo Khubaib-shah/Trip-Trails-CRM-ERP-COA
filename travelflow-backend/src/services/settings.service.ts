@@ -1,14 +1,14 @@
-import { Agency } from "../models/Agency.model";
+import { prisma } from "../lib/prisma";
 import { ApiError } from "../utils/ApiError";
 
 export async function getSettings(agencyId: string) {
-  const agency = await Agency.findById(agencyId);
+  const agency = await prisma.agency.findUnique({ where: { id: agencyId } });
   if (!agency) throw ApiError.notFound("Agency");
   return agency;
 }
 
-export async function updateSettings(agencyId: string, data: any) {
-  const agency = await Agency.findByIdAndUpdate(agencyId, { $set: data }, { new: true });
+export async function updateSettings(agencyId: string, data: Record<string, unknown>) {
+  const agency = await prisma.agency.findUnique({ where: { id: agencyId } });
   if (!agency) throw ApiError.notFound("Agency");
-  return agency;
+  return prisma.agency.update({ where: { id: agencyId }, data });
 }

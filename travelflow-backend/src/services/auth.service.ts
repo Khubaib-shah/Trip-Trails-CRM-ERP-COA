@@ -1,32 +1,38 @@
-import { User, TokenBlacklist, Agency, Branch, Role } from "../models";
+import bcrypt from "bcryptjs";
+import { prisma } from "../lib/prisma";
 import { ApiError } from "../utils/ApiError";
 import { signToken, signRefreshToken, verifyRefreshToken } from "../utils/jwt";
 import { toJSON } from "../utils/serialize";
 
 export async function login(email: string, password: string) {
-  const user = await User.findOne({ email: email.toLowerCase(), isDeleted: false }).select("+password");
+  const user = await prisma.user.findFirst({
+    where: { email: email.toLowerCase(), isDeleted: false },
+  });
+
   if (!user || user.status !== "active") {
     throw ApiError.unauthorized("Invalid email or password");
   }
 
-  const valid = await user.comparePassword(password);
+  const valid = await bcrypt.compare(password, user.password);
   if (!valid) {
     throw ApiError.unauthorized("Invalid email or password");
   }
 
-  user.lastLoginAt = new Date();
-  await user.save({ validateBeforeSave: false });
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { lastLoginAt: new Date() },
+  });
 
   const accessToken = signToken({
-    userId: String(user._id),
-    agencyId: String(user.agencyId),
+    userId: user.id,
+    agencyId: user.agencyId,
     email: user.email,
     role: user.role,
   });
 
-  const refreshToken = signRefreshToken({ userId: String(user._id) });
+  const refreshToken = signRefreshToken({ userId: user.id });
 
-  const populatedUser = await getMe(String(user._id));
+  const populatedUser = await getMe(user.id);
   return { accessToken, refreshToken, user: populatedUser };
 }
 
@@ -38,19 +44,22 @@ export async function refreshAccessToken(refreshToken: string) {
     throw ApiError.unauthorized("Invalid or expired refresh token");
   }
 
-  const user = await User.findOne({ _id: payload.userId, isDeleted: false, status: "active" });
+  const user = await prisma.user.findFirst({
+    where: { id: payload.userId, isDeleted: false, status: "active" },
+  });
+
   if (!user) {
     throw ApiError.unauthorized("User not found or inactive");
   }
 
   const newAccessToken = signToken({
-    userId: String(user._id),
-    agencyId: String(user.agencyId),
+    userId: user.id,
+    agencyId: user.agencyId,
     email: user.email,
     role: user.role,
   });
 
-  const newRefreshToken = signRefreshToken({ userId: String(user._id) });
+  const newRefreshToken = signRefreshToken({ userId: user.id });
 
   return { accessToken: newAccessToken, refreshToken: newRefreshToken };
 }
@@ -58,41 +67,48 @@ export async function refreshAccessToken(refreshToken: string) {
 export async function logout(accessToken?: string) {
   if (accessToken) {
     try {
-      const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // Tokens live max 15m
-      await TokenBlacklist.create({ token: accessToken, expiresAt }).catch(() => {});
+      const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
+      await prisma.tokenBlacklist.create({ data: { token: accessToken, expiresAt } });
     } catch {}
   }
   return { success: true };
 }
 
 export async function getMe(userId: string) {
-  const user = await User.findOne({ _id: userId, isDeleted: false });
+  const user = await prisma.user.findFirst({
+    where: { id: userId, isDeleted: false },
+  });
+
   if (!user) throw ApiError.notFound("User");
-  
-  const userObj = user.toObject();
-  if (userObj.agencyId) {
-    const agency = await Agency.findOne({ _id: userObj.agencyId });
+
+  const userObj: Record<string, unknown> = { ...user };
+
+  if (user.agencyId) {
+    const agency = await prisma.agency.findUnique({ where: { id: user.agencyId } });
     if (agency) {
-      (userObj as any).agency = agency.toObject();
+      userObj.agency = agency;
     }
   }
-  if (userObj.branchId) {
-    const branch = await Branch.findOne({ _id: userObj.branchId });
+
+  if (user.branchId) {
+    const branch = await prisma.branch.findUnique({ where: { id: user.branchId } });
     if (branch) {
-      (userObj as any).branch = branch.toObject();
+      userObj.branch = branch;
     }
   }
-  
-  if (userObj.role === "admin") {
-    (userObj as any).permissions = ["admin"]; // admin bypassing flag
+
+  if (user.role === "admin") {
+    userObj.permissions = ["admin"];
   } else {
-    const role = await Role.findOne({ agencyId: userObj.agencyId, name: userObj.role });
+    const role = await prisma.role.findFirst({
+      where: { agencyId: user.agencyId, name: user.role },
+    });
     if (role) {
-      (userObj as any).permissions = role.permissions;
+      userObj.permissions = role.permissions;
     } else {
-      (userObj as any).permissions = [];
+      userObj.permissions = [];
     }
   }
-  
+
   return toJSON(userObj);
 }

@@ -19,7 +19,7 @@ function buildContext(req: Request): domain.TenantContext {
     branchId: branchIdQuery,
     userRole: req.user?.role,
     userBranchId: req.user?.branchId ? String(req.user.branchId) : undefined,
-    callerId: req.user?._id ? String(req.user._id) : undefined,
+    callerId: req.user?.id ? String(req.user.id) : undefined,
     callerRole: req.user?.role,
   };
 }
@@ -29,7 +29,7 @@ function actor(req: Request) {
 }
 
 function userId(req: Request) {
-  return String(req.user!._id);
+  return String(req.user!.id);
 }
 
 function getPagination(req: Request): domain.PaginationOptions | undefined {

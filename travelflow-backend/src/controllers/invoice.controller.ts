@@ -9,7 +9,7 @@ function buildContext(req: Request): TenantContext {
     branchId: req.query.branchId as string | undefined,
     userRole: req.user?.role,
     userBranchId: req.user?.branchId ? String(req.user.branchId) : undefined,
-    callerId: req.user?._id ? String(req.user._id) : undefined,
+    callerId: req.user?.id ? String(req.user.id) : undefined,
     callerRole: req.user?.role,
   };
 }

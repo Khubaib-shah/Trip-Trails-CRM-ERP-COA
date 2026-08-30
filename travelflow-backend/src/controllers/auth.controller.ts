@@ -64,6 +64,6 @@ export async function logout(req: Request, res: Response) {
 
 export async function me(req: Request, res: Response) {
   if (!req.user) throw ApiError.unauthorized();
-  const user = await authService.getMe(String(req.user._id));
+  const user = await authService.getMe(String(req.user.id));
   ApiResponse.success(res, user);
 }

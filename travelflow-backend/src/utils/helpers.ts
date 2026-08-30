@@ -1,8 +1,6 @@
-import { IUser } from "../models/User.model";
-
-export function userDisplayName(user?: IUser | null): string {
+export function userDisplayName(user?: { firstName?: string; lastName?: string } | null): string {
   if (!user) return "System";
-  return `${user.firstName} ${user.lastName}`.trim();
+  return `${user.firstName ?? ""} ${user.lastName ?? ""}`.trim() || "System";
 }
 
 export function normalizePhone(phone: string): string {

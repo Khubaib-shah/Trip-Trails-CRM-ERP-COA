@@ -2,10 +2,9 @@ import { Request, Response } from "express";
 import { ApiError } from "../utils/ApiError";
 import { ApiResponse } from "../utils/ApiResponse";
 import * as quotationService from "../services/quotation.service";
-import type { IUser } from "../models/User.model";
 
 type AuthenticatedRequest = Request & {
-  user?: IUser;
+  user?: { id: string; agencyId: string; branchId?: string; role: string };
   agencyId?: string;
 };
 
@@ -44,7 +43,7 @@ export async function createQuotation(
   const input = {
     ...req.body,
     branchId: req.body.branchId || String(req.user.branchId),
-    consultantId: req.body.consultantId || String(req.user._id),
+    consultantId: req.body.consultantId || String(req.user.id),
     travelType: req.body.travelType || "custom",
     destination: req.body.destination || req.body.title || "TBD",
     currency: req.body.currency || "PKR",
@@ -70,7 +69,7 @@ export async function createQuotation(
 
   const quotation = await quotationService.createQuotation({
     agencyId: req.agencyId!,
-    createdBy: String(req.user._id),
+    createdBy: String(req.user.id),
     input,
   });
 
@@ -111,7 +110,7 @@ export async function updateQuotation(
   const quotation = await quotationService.updateQuotation({
     agencyId: req.agencyId!,
     quotationId: req.params.id,
-    updatedBy: String(req.user._id),
+    updatedBy: String(req.user.id),
     input,
   });
 
@@ -126,7 +125,7 @@ export async function sendQuotation(req: AuthenticatedRequest, res: Response) {
     agencyId: req.agencyId!,
     quotationId: req.params.id,
     status: "sent",
-    actorId: String(req.user._id),
+    actorId: String(req.user.id),
     changes: "Quotation sent",
   });
 
@@ -143,7 +142,7 @@ export async function convertQuotationToBooking(
   const result = await quotationService.convertQuotationToBooking({
     agencyId: req.agencyId!,
     quotationId: req.params.id,
-    actorId: String(req.user._id),
+    actorId: String(req.user.id),
   });
 
   if (!result) throw ApiError.notFound("Quotation");

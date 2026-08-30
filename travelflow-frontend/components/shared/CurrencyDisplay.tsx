@@ -1,4 +1,5 @@
-import { formatCurrencyPKR, formatShort, formatPKR, cn } from "@/lib/utils";
+import { formatCurrency, formatShort, formatPKR, cn } from "@/lib/utils";
+import { useBranchStore } from "@/store/branch.store";
 
 interface CurrencyDisplayProps {
   amount: number;
@@ -8,16 +9,15 @@ interface CurrencyDisplayProps {
 }
 
 /**
- * Renders a PKR currency value. Handles prefix internally — never double-prefix.
- * short=false → "Rs 4,820,000"
- * short=true  → "Rs 4.8 Lac"
+ * Renders a currency value based on the active branch currency. Handles prefix internally — never double-prefix.
  */
 export function CurrencyDisplay({
   amount,
   short = false,
   className,
 }: CurrencyDisplayProps) {
-  const formatted = formatCurrencyPKR(amount, short);
+  const { activeCurrency } = useBranchStore();
+  const formatted = formatCurrency(amount, activeCurrency, short);
 
   // "Rs 125,000" -> ["Rs", "125,000"]
   const [currency, ...rest] = formatted.split(" ");

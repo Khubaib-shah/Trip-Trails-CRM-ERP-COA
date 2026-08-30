@@ -1,9 +1,11 @@
 import { createApp } from "./app";
-import { connectDatabase } from "./config/database";
+import { prisma } from "./lib/prisma";
 import { env } from "./config/env";
 
 async function main() {
-  await connectDatabase();
+  await prisma.$connect();
+  console.log("PostgreSQL connected via Prisma");
+
   const app = createApp();
 
   app.listen(env.port, () => {

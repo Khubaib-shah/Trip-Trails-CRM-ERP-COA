@@ -9,7 +9,7 @@ function buildContext(req: Request): TenantContext {
     branchId: req.query.branchId as string | undefined,
     userRole: req.user?.role,
     userBranchId: req.user?.branchId ? String(req.user.branchId) : undefined,
-    callerId: req.user?._id ? String(req.user._id) : undefined,
+    callerId: req.user?.id ? String(req.user.id) : undefined,
     callerRole: req.user?.role,
   };
 }
@@ -24,7 +24,7 @@ function getPagination(req: Request): PaginationOptions | undefined {
 }
 
 export async function listNotifications(req: Request, res: Response) {
-  const userId = String(req.user!._id);
+  const userId = String(req.user!.id);
   const result = await notificationService.listNotifications(
     buildContext(req),
     userId,
@@ -34,7 +34,7 @@ export async function listNotifications(req: Request, res: Response) {
 }
 
 export async function markAsRead(req: Request, res: Response) {
-  const userId = String(req.user!._id);
+  const userId = String(req.user!.id);
   const result = await notificationService.markAsRead(
     buildContext(req),
     userId,
@@ -44,13 +44,13 @@ export async function markAsRead(req: Request, res: Response) {
 }
 
 export async function markAllAsRead(req: Request, res: Response) {
-  const userId = String(req.user!._id);
+  const userId = String(req.user!.id);
   const result = await notificationService.markAllAsRead(buildContext(req), userId);
   ApiResponse.success(res, result);
 }
 
 export async function deleteNotification(req: Request, res: Response) {
-  const userId = String(req.user!._id);
+  const userId = String(req.user!.id);
   const result = await notificationService.deleteNotification(
     buildContext(req),
     userId,

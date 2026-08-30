@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { asyncHandler } from "../utils/asyncHandler";
 import * as templateService from "../services/template.service";
-import { TemplateType } from "../models/Template.model";
+import { TemplateType } from "../services/template.service";
 
 export const getTemplates = asyncHandler(async (req: Request, res: Response) => {
   const agencyId = (req as any).agencyId as string;

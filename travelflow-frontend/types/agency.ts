@@ -22,6 +22,7 @@ export interface Branch {
   city: string;
   address?: string;
   phone?: string;
+  currency?: string;
   isHeadOffice: boolean;
   status: 'active' | 'inactive';
   createdAt: Date;
