@@ -23,8 +23,10 @@ import { Button } from "@/components/ui/button";
 import { DrawerForm } from "@/components/forms/DrawerForm";
 import {
   FormField,
+  FormPhoneField,
   FormTextArea,
   FormSelect,
+  FormCombobox,
 } from "@/components/forms/FormField";
 import { LeadSourceSelector } from "@/components/forms/LeadSourceSelector";
 import { Form } from "@/components/ui/form";
@@ -45,7 +47,8 @@ export default function LeadsPage() {
   const [dateRange, setDateRange] = useState<DateRange | undefined>();
   const { isDrawerOpen, editingId, isEditing, openCreate, openEdit, close } =
     useEntityDrawer();
-  const { hasPermission } = usePermissions();
+  const { hasPermission, isAdmin } = usePermissions();
+  const user = useAuthStore((state) => state.user);
 
   const { data = [], isLoading: isLeadsLoading } = useLeads(dateRange ? { from: dateRange.from, to: dateRange.to } : undefined);
   const { data: agents = [], isLoading: isAgentsLoading } = useAgents();
@@ -63,7 +66,12 @@ export default function LeadsPage() {
   });
 
   const handleOpenCreate = () => {
-    form.reset(leadDefaultValues);
+    const defaults = { ...leadDefaultValues };
+    if (!isAdmin && user) {
+      defaults.assignedAgentId = user.id;
+      defaults.branchId = user.branchId;
+    }
+    form.reset(defaults);
     openCreate();
   };
 
@@ -255,19 +263,16 @@ export default function LeadsPage() {
                   placeholder="e.g. Ahmed Raza"
                   required
                 />
-                <FormField
+                <FormPhoneField
                   control={form.control}
                   name="phone"
                   label="Phone"
-                  type="tel"
-                  placeholder="03XX-XXXXXXX"
                   required
                 />
-                <FormField
+                <FormPhoneField
                   control={form.control}
                   name="whatsapp"
                   label="WhatsApp"
-                  type="tel"
                 />
                 <FormField
                   control={form.control}
@@ -339,7 +344,7 @@ export default function LeadsPage() {
                 )}
               />
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <FormSelect
+                <FormCombobox
                   control={form.control}
                   name="status"
                   label="Lead Status"
@@ -349,24 +354,28 @@ export default function LeadsPage() {
                     value,
                   }))}
                 />
-                <FormSelect
-                  control={form.control}
-                  name="assignedAgentId"
-                  label="Assigned Agent"
-                  options={agents.map((a) => ({
-                    label: `${a.firstName} ${a.lastName}`,
-                    value: a.id,
-                  }))}
-                />
-                <FormSelect
-                  control={form.control}
-                  name="branchId"
-                  label="Branch"
-                  options={branches.map((b) => ({
-                    label: b.name,
-                    value: b.id,
-                  }))}
-                />
+                {isAdmin && (
+                  <>
+                    <FormCombobox
+                      control={form.control}
+                      name="assignedAgentId"
+                      label="Assigned Agent"
+                      options={agents.map((a) => ({
+                        label: `${a.firstName} ${a.lastName}`,
+                        value: a.id,
+                      }))}
+                    />
+                    <FormCombobox
+                      control={form.control}
+                      name="branchId"
+                      label="Branch"
+                      options={branches.map((b) => ({
+                        label: b.name,
+                        value: b.id,
+                      }))}
+                    />
+                  </>
+                )}
               </div>
             </div>
             <FormTextArea

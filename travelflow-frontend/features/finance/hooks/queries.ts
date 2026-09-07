@@ -47,23 +47,103 @@ export function useDeleteExpense() {
   });
 }
 
-export function useReceipts(filters?: any) {
+
+export function useAccounts() {
   return useQuery({
-    queryKey: queryKeys.finance.receipts.list(filters || {}),
-    queryFn: () => API.getReceipts(filters),
+    queryKey: queryKeys.accounting.accounts.list(),
+    queryFn: () => API.getChartOfAccounts(),
+    staleTime: 60_000,
+  });
+}
+
+export function usePayments(filters?: any) {
+  return useQuery({
+    queryKey: queryKeys.finance.payments.list(filters || {}),
+    queryFn: () => API.getPayments(filters),
     placeholderData: (previousData) => previousData,
     staleTime: 60_000,
   });
 }
 
-export function useCreateReceipt() {
+export function useCreateCustomerPayment() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (data: any) => API.createReceipt(data),
+    mutationFn: (data: any) => API.createCustomerPayment(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.finance.all });
       queryClient.invalidateQueries({ queryKey: queryKeys.dashboard.all });
     },
   });
 }
+
+export function useCreditNotes() {
+  return useQuery({
+    queryKey: queryKeys.finance.creditnotes.list(),
+    queryFn: () => API.getCreditNotes(),
+  });
+}
+
+export function useCreateCreditNote() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { invoiceId: string; amount: number; reason: string; notes?: string; bookingId?: string }) =>
+      API.createCreditNote(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.finance.all });
+    },
+  });
+}
+
+export function useApplyCreditNote() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => API.applyCreditNote(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.finance.all });
+    },
+  });
+}
+
+export function useCreateAccount() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (data: any) => API.createAccount(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.accounting.all });
+    },
+  });
+}
+
+export function useUpdateAccount() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: any }) => API.updateAccount(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.accounting.all });
+    },
+  });
+}
+
+export function useToggleAccountStatus() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, isActive }: { id: string; isActive?: boolean }) =>
+      API.toggleAccountStatus(id, isActive),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.accounting.all });
+    },
+  });
+}
+
+export function useDeleteAccount() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => API.deleteAccount(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.accounting.all });
+    },
+  });
+}
+
+

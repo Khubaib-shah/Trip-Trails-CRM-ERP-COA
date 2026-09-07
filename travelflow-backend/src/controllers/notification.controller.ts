@@ -1,9 +1,9 @@
 import { Request, Response } from "express";
 import { ApiResponse } from "../utils/ApiResponse";
 import * as notificationService from "../services/notification.service";
-import { TenantContext, PaginationOptions } from "../services/domain.service";
+import { AgencyContext, PaginationOptions } from "../services/domain.service";
 
-function buildContext(req: Request): TenantContext {
+function buildContext(req: Request): AgencyContext {
   return {
     agencyId: req.agencyId!,
     branchId: req.query.branchId as string | undefined,

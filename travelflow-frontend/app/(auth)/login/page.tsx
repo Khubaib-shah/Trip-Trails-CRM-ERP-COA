@@ -55,8 +55,7 @@ export default function LoginPage() {
       showSuccess("Successfully logged in");
       router.push("/dashboard");
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Login failed";
-      showError(message);
+      showError(err);
     } finally {
       setSubmitting(false);
     }

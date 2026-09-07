@@ -1,5 +1,6 @@
 "use client";
 
+import { useBranchStore } from "@/store/branch.store";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, Users } from "lucide-react";
@@ -18,7 +19,7 @@ import { DataTableRowActions } from "@/components/tables/DataTableRowActions";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { Button } from "@/components/ui/button";
 import { DrawerForm } from "@/components/forms/DrawerForm";
-import { FormField, FormSelect } from "@/components/forms/FormField";
+import { FormField, FormPhoneField, FormSelect, FormCombobox } from "@/components/forms/FormField";
 import { Form } from "@/components/ui/form";
 import {
   customerSchema,
@@ -42,6 +43,7 @@ export default function CustomersPage() {
   const { isDrawerOpen, editingId, isEditing, openCreate, openEdit, close } =
     useEntityDrawer();
   const { hasPermission } = usePermissions();
+  const activeCurrency = useBranchStore((state) => state.activeCurrency);
 
   const { data = [], isLoading } = useCustomers(dateRange ? { from: dateRange.from, to: dateRange.to } : undefined);
   
@@ -167,7 +169,7 @@ export default function CustomersPage() {
       ),
       cell: ({ row }) => (
         <div className="text-tf-text-primary">
-          ₨ {row.original.totalSpent.toLocaleString()}
+          {activeCurrency} {row.original.totalSpent.toLocaleString()}
         </div>
       ),
     },
@@ -267,19 +269,16 @@ export default function CustomersPage() {
                   label="Email"
                   type="email"
                 />
-                <FormField
+                <FormPhoneField
                   control={form.control}
                   name="phone"
                   label="Phone"
-                  type="tel"
-                  placeholder="03XX-XXXXXXX"
                   required
                 />
-                <FormField
+                <FormPhoneField
                   control={form.control}
                   name="whatsapp"
                   label="WhatsApp"
-                  type="tel"
                 />
                 <FormField
                   control={form.control}
@@ -316,7 +315,7 @@ export default function CustomersPage() {
                 Address
               </h4>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <FormSelect
+                <FormCombobox
                   control={form.control}
                   name="city"
                   label="City"
@@ -366,7 +365,7 @@ export default function CustomersPage() {
                     label="Company Name"
                     required
                   />
-                  <FormSelect
+                  <FormCombobox
                     control={form.control}
                     name="businessType"
                     label="Business Type"
@@ -397,11 +396,10 @@ export default function CustomersPage() {
                   name="emergencyContactName"
                   label="Emergency Contact Name"
                 />
-                <FormField
+                <FormPhoneField
                   control={form.control}
                   name="emergencyContactPhone"
                   label="Emergency Contact Phone"
-                  type="tel"
                 />
               </div>
               <FormField

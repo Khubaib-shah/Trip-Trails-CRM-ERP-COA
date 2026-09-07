@@ -140,22 +140,6 @@ export function Sidebar() {
 
           {isOpen && isAgencyOpen && (
             <div className="mt-2 space-y-1 animate-in slide-in-from-top-2 duration-200">
-              <div
-                onClick={() => {
-                  setActiveBranch("all", "PKR");
-                  window.location.reload();
-                }}
-                className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm text-tf-text-secondary hover:bg-tf-surface-2 cursor-pointer transition-colors ${activeBranchId === "all" ? "bg-tf-surface-2" : ""}`}
-              >
-                <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded bg-tf-surface border border-tf-border text-xs font-medium text-tf-text-primary">
-                  HQ
-                </div>
-                <div className="flex flex-col overflow-hidden">
-                  <span className="truncate font-medium leading-tight">All Branches</span>
-                  <span className="truncate text-[10px] text-tf-text-muted">Entire Agency</span>
-                </div>
-              </div>
-
               {branches.map(branch => (
                 <div
                   key={branch.id}

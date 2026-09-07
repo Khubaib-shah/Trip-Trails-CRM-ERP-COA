@@ -15,6 +15,7 @@ export function mapQuotationToForm(q: Quotation): QuotationFormValues {
 
     travelType: q.travelType ?? "custom",
     destination: q.destination ?? "",
+    currency: q.currency === "AED" ? "AED" : "PKR",
     adults: q.adults ?? 0,
     children: q.children ?? 0,
     infants: q.infants ?? 0,
@@ -26,9 +27,13 @@ export function mapQuotationToForm(q: Quotation): QuotationFormValues {
 
     items: (Array.isArray(q.items) ? q.items : []).map((it) => ({
       id: it.id,
-      description: it.description,
-      quantity: it.quantity,
-      unitPrice: it.unitPrice,
+      serviceCategory: it.serviceCategory || "other",
+      title: it.title || "",
+      description: it.description || "",
+      quantity: it.quantity || 1,
+      costPrice: it.costPrice || 0,
+      sellingPrice: it.sellingPrice || 0,
+      supplierId: it.supplierId || undefined,
     })),
     taxes: (Array.isArray(q.taxes) ? q.taxes : []).map((t) => ({
       id: t.id,

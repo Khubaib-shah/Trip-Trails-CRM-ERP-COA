@@ -1,13 +1,13 @@
 import { prisma } from "../lib/prisma";
 import { ApiError } from "../utils/ApiError";
 
-export type TemplateType = "quotation_notes" | "quotation_terms" | "invoice_notes" | "invoice_terms";
+export type TemplateType = "quotation_notes" | "quotation_terms" | "invoice_notes" | "invoice_terms" | "booking_notes" | "booking_terms";
 
-type TenantContext = {
+type AgencyContext = {
   agencyId: string;
 };
 
-export async function getTemplates({ agencyId }: TenantContext, type?: TemplateType) {
+export async function getTemplates({ agencyId }: AgencyContext, type?: TemplateType) {
   const where: any = { agencyId, isDeleted: false };
   if (type) where.type = type;
   return prisma.template.findMany({ where, orderBy: { name: "asc" } });
@@ -18,7 +18,7 @@ export async function createTemplate({
   name,
   type,
   content,
-}: TenantContext & { name: string; type: TemplateType; content: string }) {
+}: AgencyContext & { name: string; type: TemplateType; content: string }) {
   if (!name || !type || !content) {
     throw ApiError.badRequest("Name, type, and content are required");
   }
@@ -33,7 +33,7 @@ export async function updateTemplate({
   name,
   type,
   content,
-}: TenantContext & {
+}: AgencyContext & {
   templateId: string;
   name?: string;
   type?: TemplateType;
@@ -57,7 +57,7 @@ export async function updateTemplate({
 export async function deleteTemplate({
   agencyId,
   templateId,
-}: TenantContext & { templateId: string }) {
+}: AgencyContext & { templateId: string }) {
   const template = await prisma.template.findFirst({
     where: { id: templateId, agencyId, isDeleted: false },
   });

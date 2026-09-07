@@ -22,14 +22,22 @@ import {
   leadIdParamSchema,
   roleIdParamSchema,
   createRoleSchema,
+  createCustomerPaymentSchema,
 } from "../validators/schemas";
 import * as auth from "../controllers/auth.controller";
 import * as domain from "../controllers/domain.controller";
+import * as invoiceController from "../controllers/invoice.controller";
 import quotationsRouter from "./quotations";
 import templateRouter from "./template.routes";
 import settingsRouter from "./settings";
 import notificationsRouter from "./notifications";
 import invoicesRouter from "./invoices";
+import creditnotesRouter from "./creditnotes";
+import paymentSchedulesRouter from "./payment-schedules";
+import accountingRouter from "./accounting";
+import expensesRouter from "./expenses";
+import reportsRouter from "./reports";
+import importRouter from "./import.routes";
 
 const router = Router();
 
@@ -298,6 +306,12 @@ protectedRouter.patch(
   validate(userSchema),
   asyncHandler(domain.updateUser),
 );
+protectedRouter.post(
+  "/users/:id/reset-password",
+  requirePermission("Users: Edit"),
+  validate(idParamSchema, "params"),
+  asyncHandler(domain.resetUserPassword),
+);
 protectedRouter.delete(
   "/users/:id",
   requirePermission("Users: Delete"),
@@ -370,6 +384,12 @@ protectedRouter.post(
   validate(idParamSchema, "params"),
   asyncHandler(domain.recordSupplierPayment),
 );
+protectedRouter.post(
+  "/supplier-payments/:id/allocate",
+  requirePermission("Suppliers: Edit"),
+  validate(idParamSchema, "params"),
+  asyncHandler(domain.allocateSupplierPayment),
+);
 protectedRouter.get(
   "/suppliers/:id/statement",
   requirePermission("Suppliers: View"),
@@ -377,9 +397,26 @@ protectedRouter.get(
   asyncHandler(domain.getSupplierStatement),
 );
 
-// Receipts (Customer Payments)
-protectedRouter.get("/receipts", requirePermission("Expenses: View"), asyncHandler(domain.listReceipts));
-protectedRouter.post("/receipts", requirePermission("Expenses: Create"), asyncHandler(domain.createReceipt));
+// Customer Payments
+protectedRouter.get(
+  "/payments/:id",
+  requirePermission("Payments: View"),
+  validate(idParamSchema, "params"),
+  asyncHandler(domain.getCustomerPayment),
+);
+protectedRouter.get("/payments", requirePermission("Payments: View"), asyncHandler(domain.listCustomerPayments));
+protectedRouter.post(
+  "/payments",
+  requirePermission("Payments: Create"),
+  validate(createCustomerPaymentSchema),
+  asyncHandler(domain.createCustomerPayment),
+);
+protectedRouter.post(
+  "/payments/:id/allocate",
+  requirePermission("Payments: Edit"),
+  validate(idParamSchema, "params"),
+  asyncHandler(domain.allocateCustomerPayment),
+);
 
 // Booking Documents
 protectedRouter.get(
@@ -408,5 +445,29 @@ protectedRouter.use("/templates", templateRouter);
 protectedRouter.use("/settings", settingsRouter);
 protectedRouter.use("/notifications", notificationsRouter);
 protectedRouter.use("/invoices", invoicesRouter);
+protectedRouter.use("/creditnotes", creditnotesRouter);
+protectedRouter.use("/payment-schedules", paymentSchedulesRouter);
+protectedRouter.use("/accounting", accountingRouter);
+protectedRouter.use("/expenses", expensesRouter);
+protectedRouter.use("/reports", reportsRouter);
+protectedRouter.use("/import", importRouter);
+
+// Ledgers
+protectedRouter.get(
+  "/reports/ar-ledger",
+  requirePermission("Accounting: AR"),
+  asyncHandler(domain.getARLedger),
+);
+protectedRouter.get(
+  "/reports/ap-ledger",
+  requirePermission("Accounting: AP"),
+  asyncHandler(domain.getAPLedger),
+);
+
+protectedRouter.patch(
+  "/invoices/:id/status",
+  requirePermission("Invoices: Edit"),
+  asyncHandler(invoiceController.updateInvoiceStatus),
+);
 
 export default router;

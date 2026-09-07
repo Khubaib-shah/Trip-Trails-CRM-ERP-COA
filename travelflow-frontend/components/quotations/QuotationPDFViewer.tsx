@@ -340,13 +340,13 @@ export default function QuotationPDFViewer({ data }: { data: any }) {
             {(data.items || []).map((item: any, idx: number) => (
               <View key={idx} style={styles.tableRow}>
                 <Text style={styles.tableCellLeft}>
-                  {item.description}
+                  {item.title ? `${item.title}${item.description ? ` - ${item.description}` : ""}` : item.description}
                 </Text>
                 <Text style={styles.tableCellCenter}>
                   {item.quantity}
                 </Text>
                 <Text style={styles.tableCellRight}>
-                  {(item.quantity * item.unitPrice)?.toLocaleString()}
+                  {(item.lineTotal ?? (item.quantity * (item.sellingPrice || 0)))?.toLocaleString()}
                 </Text>
               </View>
             ))}
@@ -382,27 +382,27 @@ export default function QuotationPDFViewer({ data }: { data: any }) {
               <View style={styles.summaryRow}>
                 <Text style={styles.summaryLabel}>Subtotal :</Text>
                 <Text style={styles.summaryValue}>
-                  Rs {data.subtotal?.toLocaleString() ?? data.subtotalAmount?.toLocaleString()}
+                  {data.currency || "PKR"} {data.subtotal?.toLocaleString() ?? data.subtotalAmount?.toLocaleString()}
                 </Text>
               </View>
               
               <View style={styles.summaryRow}>
                 <Text style={styles.summaryLabel}>Tax :</Text>
                 <Text style={styles.summaryValue}>
-                  Rs {data.taxTotal?.toLocaleString() ?? data.taxAmount?.toLocaleString()}
+                  {data.currency || "PKR"} {data.taxTotal?.toLocaleString() ?? data.taxAmount?.toLocaleString()}
                 </Text>
               </View>
               
               <View style={styles.summaryRow}>
                 <Text style={styles.summaryLabel}>Total Quoted :</Text>
                 <Text style={styles.summaryValue}>
-                  Rs {data.grandTotal?.toLocaleString()}
+                  {data.currency || "PKR"} {data.grandTotal?.toLocaleString()}
                 </Text>
               </View>
 
               <View style={styles.totalBoxContainer}>
                 <Text style={styles.totalBoxAmount}>
-                  Rs {data.grandTotal?.toLocaleString()}
+                  {data.currency || "PKR"} {data.grandTotal?.toLocaleString()}
                 </Text>
                 <Text style={styles.totalBoxLabel}>TOTAL</Text>
               </View>

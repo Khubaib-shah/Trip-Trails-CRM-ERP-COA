@@ -1,7 +1,8 @@
 "use client";
+import { useBranchStore } from "@/store/branch.store";
 
 import { useState, useEffect } from "react";
-import { Plus, FileText, Printer, CreditCard } from "lucide-react";
+import { Plus, FileText, Printer, CreditCard, Ban } from "lucide-react";
 import { ColumnDef } from "@tanstack/react-table";
 import { useRouter } from "next/navigation";
 
@@ -12,22 +13,26 @@ import { StatusBadge } from "@/components/shared/StatusBadge";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { Button } from "@/components/ui/button";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
-import { RecordPaymentDrawer } from "@/components/bookings/RecordPaymentDrawer";
-import { showError } from "@/lib/toast-utils";
 import { API } from "@/lib/data-source";
-import { Booking } from "@/types";
+import { IssueCreditNoteDialog } from "@/components/invoices/IssueCreditNoteDialog";
+import { showSuccess, showError } from "@/lib/toast-utils";
+import { usePermissions } from "@/hooks/use-permissions";
+import type { Invoice } from "@/types/invoice";
 
 export default function InvoicesPage() {
+  const activeCurrency = useBranchStore((state) => state.activeCurrency);
+
   const router = useRouter();
-  const [data, setData] = useState<Booking[]>([]);
+  const { hasPermission } = usePermissions();
+  const [data, setData] = useState<Invoice[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [paymentBooking, setPaymentBooking] = useState<Booking | null>(null);
+  const [creditNoteInvoice, setCreditNoteInvoice] = useState<Invoice | null>(null);
 
   const load = async () => {
     setIsLoading(true);
     try {
-      const bookings = await API.getBookings();
-      setData(bookings);
+      const invoices = await API.getInvoices();
+      setData(invoices);
     } catch {
       // ignore
     } finally {
@@ -39,62 +44,74 @@ export default function InvoicesPage() {
     load();
   }, []);
 
-  const columns: ColumnDef<Booking>[] = [
+  const handleDelete = async (row: any) => {
+    try {
+      await API.deleteInvoice(row.original.id);
+      setData((prev) => prev.filter((inv) => inv.id !== row.original.id));
+      showSuccess("Invoice deleted successfully");
+    } catch (error: unknown) {
+      showError(error, { context: "Deleting invoice" });
+    }
+  };
+
+  const columns: ColumnDef<Invoice>[] = [
     {
-      accessorKey: "bookingRef",
+      accessorKey: "invoiceRef",
       header: "Invoice #",
       cell: ({ row }) => (
         <div className="font-mono text-xs font-medium text-tf-primary">
-          {row.original.bookingRef}
+          {row.original.invoiceRef}
         </div>
       ),
     },
     {
       accessorKey: "customer",
       header: "Customer",
+      cell: ({ row }) => {
+        const customer = row.original.customer;
+        const name = customer
+          ? customer.companyName || `${customer.firstName} ${customer.lastName}`
+          : "—";
+        return <span className="font-medium text-tf-text-primary">{name}</span>;
+      },
+    },
+    {
+      accessorKey: "dueDate",
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} title="Due Date" />
+      ),
       cell: ({ row }) => (
-        <span className="font-medium text-tf-text-primary">
-          {row.original.customer
-            ? `${row.original.customer.firstName} ${row.original.customer.lastName}`
+        <span className="text-tf-text-secondary">
+          {row.original.dueDate
+            ? new Date(row.original.dueDate).toLocaleDateString("en-GB")
             : "—"}
         </span>
       ),
     },
     {
-      accessorKey: "createdAt",
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title="Issue Date" />
-      ),
-      cell: ({ row }) => (
-        <span className="text-tf-text-secondary">
-          {new Date(row.original.createdAt).toLocaleDateString("en-GB")}
-        </span>
-      ),
-    },
-    {
-      accessorKey: "salePrice",
+      accessorKey: "total",
       header: ({ column }) => (
         <DataTableColumnHeader column={column} title="Amount" />
       ),
       cell: ({ row }) => (
         <div className="font-semibold text-tf-text-primary">
-          ₨ {row.original.salePrice.toLocaleString()}
+          {activeCurrency} {(row.original.total || 0).toLocaleString()}
         </div>
       ),
     },
     {
-      accessorKey: "paymentStatus",
+      accessorKey: "status",
       header: "Status",
       filterFn: (row, id, value) => {
         const rawRowValue = row.getValue(id) as any;
-        const rowValue = typeof rawRowValue === 'object' && rawRowValue !== null 
+        const rowValue = typeof rawRowValue === 'object' && rawRowValue !== null
           ? (rawRowValue.id || rawRowValue.value || rawRowValue.name || String(rawRowValue))
           : (rawRowValue || "");
         const filterValue = (value as string) || "";
         return String(rowValue).toLowerCase().replace(/[-_ ]/g, '') === filterValue.toLowerCase().replace(/[-_ ]/g, '');
       },
       cell: ({ row }) => (
-        <StatusBadge status={row.original.paymentStatus as any} />
+        <StatusBadge status={row.original.status as any} />
       ),
     },
     {
@@ -102,17 +119,18 @@ export default function InvoicesPage() {
       cell: ({ row }) => {
         const handleViewPDF = async () => {
           try {
-            const invoice = await API.generateInvoiceFromBooking(row.original.id);
-            window.open(`/print/invoice/${invoice.id}`, "_blank");
+            window.open(`/print/invoice/${row.original.id}`, "_blank");
           } catch (error: any) {
-            showError(error.message || "Failed to view invoice");
+            // toast error handled upstream
           }
         };
 
         return (
           <DataTableRowActions
             row={row}
-            onView={() => router.push(`/bookings/${row.original.id}`)}
+            onView={() => router.push(`/invoices/${row.original.id}`)}
+            onDelete={hasPermission("Invoices: Delete") ? handleDelete : undefined}
+            deleteLabel="this invoice"
             customActions={(row) => (
               <>
                 <DropdownMenuItem
@@ -122,15 +140,13 @@ export default function InvoicesPage() {
                   <FileText className="mr-2 h-4 w-4" />
                   Print PDF
                 </DropdownMenuItem>
-                {row.original.balance > 0 && (
-                  <DropdownMenuItem
-                    onClick={() => setPaymentBooking(row.original)}
-                    className="text-tf-success focus:bg-tf-success/10 focus:text-tf-success cursor-pointer"
-                  >
-                    <CreditCard className="mr-2 h-4 w-4" />
-                    Record Payment
-                  </DropdownMenuItem>
-                )}
+                <DropdownMenuItem
+                  onClick={() => setCreditNoteInvoice(row.original)}
+                  className="text-tf-text-secondary focus:bg-tf-surface-2 cursor-pointer"
+                >
+                  <Ban className="mr-2 h-4 w-4" />
+                  Issue Credit Note
+                </DropdownMenuItem>
               </>
             )}
           />
@@ -148,52 +164,45 @@ export default function InvoicesPage() {
             Manage billing, pending payments, and customer invoices.
           </p>
         </div>
-        <Button
-          onClick={() => router.push("/bookings/new")}
-          className="bg-tf-primary text-white hover:bg-tf-primary-hover shadow-sm"
-        >
-          <Plus className="mr-2 h-4 w-4" /> Generate Invoice
-        </Button>
       </div>
 
       <div className="bg-tf-surface rounded-xl border border-tf-border shadow-sm p-6">
         <DataTable
           columns={columns}
           data={data}
-          searchKey="bookingRef"
+          searchKey="invoiceRef"
           searchPlaceholder="Search invoices..."
           isLoading={isLoading}
           filters={[
             {
-              column: "paymentStatus",
-              title: "Payment",
+              column: "status",
+              title: "Status",
               options: [
+                { label: "Draft", value: "draft" },
+                { label: "Sent", value: "sent" },
                 { label: "Paid", value: "paid" },
-                { label: "Partial", value: "partial" },
-                { label: "Unpaid", value: "unpaid" },
+                { label: "Overdue", value: "overdue" },
+                { label: "Cancelled", value: "cancelled" },
               ],
             },
           ]}
           emptyState={
             <EmptyState
               icon={FileText}
-              title="No invoices generated"
-              description="You haven't created any invoices yet. Generate an invoice from a confirmed booking."
-              action={{
-                label: "Generate Invoice",
-                onClick: () => router.push("/bookings/new"),
-              }}
+              title="No invoices found"
+              description="No invoices have been generated yet."
             />
           }
         />
       </div>
 
-      <RecordPaymentDrawer
-        isOpen={!!paymentBooking}
-        onClose={() => setPaymentBooking(null)}
-        booking={paymentBooking}
-        onSuccess={load}
-      />
+      {creditNoteInvoice && (
+        <IssueCreditNoteDialog
+          isOpen={!!creditNoteInvoice}
+          onClose={() => setCreditNoteInvoice(null)}
+          invoice={creditNoteInvoice}
+        />
+      )}
     </div>
   );
 }

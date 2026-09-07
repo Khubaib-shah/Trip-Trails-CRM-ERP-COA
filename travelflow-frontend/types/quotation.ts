@@ -16,9 +16,14 @@ export type QuotationTaxType = "fixed" | "percentage";
 export interface QuotationItem {
   id: string;
   quotationId: string;
+  serviceCategory: string;
+  title: string;
   description: string;
+  supplierId?: string;
+  supplier?: Supplier;
   quantity: number;
-  unitPrice: number;
+  costPrice: number;
+  sellingPrice: number;
   lineTotal: number;
   createdAt: Date;
   updatedAt: Date;
@@ -49,9 +54,11 @@ export interface QuotationAttachment {
 export interface QuotationVersion {
   id: string;
   quotationId: string;
-  versionNumber: number;
+  version: number;
   changes: string;
+  snapshot?: Partial<Quotation>;
   createdBy: string;
+  createdByUser?: { firstName: string; lastName: string };
   createdAt: Date;
 }
 
@@ -70,6 +77,11 @@ export interface Quotation {
   title: string;
   status: QuotationStatus;
 
+  subtotalAmount?: number;
+  taxAmount?: number;
+  grandTotal?: number;
+  estimatedProfit?: number;
+
   createdAt: Date;
   updatedAt: Date;
 
@@ -78,6 +90,7 @@ export interface Quotation {
   adults?: number;
   children?: number;
   infants?: number;
+  currency?: "PKR" | "AED";
   validUntil?: Date;
 
   customer?: Customer;
@@ -103,11 +116,6 @@ export interface Quotation {
   notes?: string;
   terms?: string;
   templates?: string;
-
-  totalAmount: number;
-  subtotalAmount: number;
-  taxAmount: number;
-  grandTotal: number;
 
   attachments: QuotationAttachment[];
   versions: QuotationVersion[];

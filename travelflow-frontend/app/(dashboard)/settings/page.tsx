@@ -11,6 +11,7 @@ import { Separator } from "@/components/ui/separator";
 import { showSuccess, showError } from "@/lib/toast-utils";
 import { TemplatesSettings } from "@/components/settings/TemplatesSettings";
 import { ApiClient as API } from "@/lib/api-client";
+import { PhoneInput } from "@/components/ui/phone-input";
 
 export default function SettingsPage() {
   const [isSaving, setIsSaving] = useState(false);
@@ -190,12 +191,11 @@ export default function SettingsPage() {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="phone" className="text-tf-text-primary font-medium">Phone Number</Label>
-                  <Input
-                    id="phone"
-                    type="tel"
+                  <PhoneInput
                     value={company.contactPhone}
-                    onChange={(e) => setCompany({ ...company, contactPhone: e.target.value })}
-                    className="bg-[var(--tf-bg)] border-tf-border focus-visible:ring-[var(--tf-primary)]"
+                    onChange={(val) => setCompany({ ...company, contactPhone: val })}
+                    placeholder="Enter phone number"
+                    className="bg-[var(--tf-bg)]"
                   />
                 </div>
                 <div className="space-y-2 md:col-span-2">

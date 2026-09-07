@@ -24,18 +24,17 @@ export default function ReceiptPrintPage() {
 
   useEffect(() => {
     if (id) {
-      API.getReceipts()
-        .then((receipts: any[]) => {
-          const receipt = receipts.find(r => r.id === id);
-          if (receipt) {
-            setData(receipt);
+      API.getPayment(id as string)
+        .then((payment) => {
+          if (payment) {
+            setData(payment);
           } else {
-            setError("Receipt not found");
+            setError("Payment not found");
           }
         })
         .catch((err) => {
           console.error(err);
-          setError(err.message || "Failed to load receipt");
+          setError(err.message || "Failed to load payment");
         });
     }
   }, [id]);
@@ -51,7 +50,7 @@ export default function ReceiptPrintPage() {
   if (!data) {
     return (
       <div className="flex h-screen w-full items-center justify-center">
-        <div className="text-lg text-tf-text-secondary">Loading Receipt Data...</div>
+        <div className="text-lg text-tf-text-secondary">Loading Payment Data...</div>
       </div>
     );
   }

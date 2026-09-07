@@ -132,6 +132,13 @@ export default function LeadDetailPage() {
           <Button
             variant="outline"
             className="bg-tf-surface text-tf-text-primary"
+            onClick={() => router.push(`/quotations/create?leadId=${lead.id}`)}
+          >
+            Create Quotation
+          </Button>
+          <Button
+            variant="outline"
+            className="bg-tf-surface text-tf-text-primary"
             onClick={() => setFollowUpOpen(true)}
           >
             Add Follow-up

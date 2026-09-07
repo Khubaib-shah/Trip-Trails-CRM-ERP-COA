@@ -52,8 +52,8 @@ const STATUS_MAP: Record<number, Omit<UserFriendlyError, "status">> = {
     code: "VALIDATION",
   },
   401: {
-    title: "Session expired",
-    description: "Please sign in again.",
+    title: "Authentication failed",
+    description: "Please check your credentials and try again.",
     canRetry: false,
     severity: "warning",
     code: "UNAUTHORIZED",
@@ -94,29 +94,29 @@ const STATUS_MAP: Record<number, Omit<UserFriendlyError, "status">> = {
     code: "RATE_LIMITED",
   },
   500: {
-    title: "Something went wrong",
-    description: "Please try again.",
+    title: "Server error",
+    description: "Something went wrong on our end. Please try again in a moment.",
     canRetry: true,
     severity: "error",
     code: "SERVER_ERROR",
   },
   502: {
-    title: "Can't connect right now",
-    description: "Try again in a moment.",
+    title: "Service unavailable",
+    description: "The server is temporarily unavailable. Please try again in a moment.",
     canRetry: true,
     severity: "error",
     code: "SERVER_UNAVAILABLE",
   },
   503: {
-    title: "Can't connect right now",
-    description: "Try again in a moment.",
+    title: "Service unavailable",
+    description: "The server is temporarily unavailable. Please try again in a moment.",
     canRetry: true,
     severity: "error",
     code: "SERVER_UNAVAILABLE",
   },
   504: {
-    title: "Can't connect right now",
-    description: "Try again in a moment.",
+    title: "Service unavailable",
+    description: "The server took too long to respond. Please try again in a moment.",
     canRetry: true,
     severity: "error",
     code: "SERVER_UNAVAILABLE",
@@ -209,8 +209,8 @@ export function parseApiError(error: unknown): UserFriendlyError {
   // 3. Network-level failure (DNS, CORS, ECONNREFUSED, etc.)
   if (isNetworkError(error)) {
     return {
-      title: "Can't connect right now",
-      description: "Try again in a moment.",
+      title: "Connection lost",
+      description: "Unable to reach the server. Please check your internet connection and try again.",
       canRetry: true,
       severity: "error",
       code: "SERVER_UNAVAILABLE",
@@ -223,11 +223,11 @@ export function parseApiError(error: unknown): UserFriendlyError {
     if (mapped) {
       const fieldErrors = extractFieldErrors(error);
 
-      // For validation errors, if the backend sent a human-readable
+      // For validation and auth errors, if the backend sent a human-readable
       // message (not "HTTP 400"), prefer that.
       let description = mapped.description;
       if (
-        (error.status === 400 || error.status === 422) &&
+        (error.status === 400 || error.status === 401 || error.status === 422) &&
         error.message &&
         !error.message.startsWith("HTTP ") &&
         !error.message.startsWith("Server Error")
@@ -246,8 +246,8 @@ export function parseApiError(error: unknown): UserFriendlyError {
     // Catch-all for any other 4xx / 5xx
     if (error.status >= 500) {
       return {
-        title: "Something went wrong",
-        description: "Please try again.",
+        title: "Server error",
+        description: "Something went wrong on our end. Please try again in a moment.",
         canRetry: true,
         severity: "error",
         code: "SERVER_ERROR",
@@ -256,11 +256,11 @@ export function parseApiError(error: unknown): UserFriendlyError {
     }
 
     return {
-      title: "Something went wrong",
+      title: "Request failed",
       description:
         error.message && !error.message.startsWith("HTTP ")
           ? error.message
-          : "Please try again.",
+          : "The request could not be completed. Please try again.",
       canRetry: false,
       severity: "warning",
       code: "UNKNOWN",
@@ -271,8 +271,8 @@ export function parseApiError(error: unknown): UserFriendlyError {
   // 5. ApiError without status (e.g. invalid JSON)
   if (error instanceof ApiError) {
     return {
-      title: "Something went wrong",
-      description: "Please try again.",
+      title: "Request failed",
+      description: "The request could not be completed. Please try again.",
       canRetry: true,
       severity: "error",
       code: "SERVER_ERROR",
@@ -282,7 +282,7 @@ export function parseApiError(error: unknown): UserFriendlyError {
   // 6. Completely unknown error
   return {
     title: "Something went wrong",
-    description: "Please try again.",
+    description: "An unexpected error occurred. Please try again.",
     canRetry: true,
     severity: "error",
     code: "UNKNOWN",

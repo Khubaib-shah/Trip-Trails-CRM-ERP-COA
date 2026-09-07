@@ -1,4 +1,5 @@
 "use client";
+import { useBranchStore } from "@/store/branch.store";
 
 import { Area, AreaChart as RechartsAreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { formatShort } from "@/lib/utils";
@@ -15,6 +16,8 @@ interface AreaChartProps {
 }
 
 export function AreaChart({ data, xKey = "name", series, height = 300 }: AreaChartProps) {
+  const activeCurrency = useBranchStore((state) => state.activeCurrency);
+
   return (
     <div style={{ width: '100%', height: height }}>
       <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
@@ -47,7 +50,7 @@ export function AreaChart({ data, xKey = "name", series, height = 300 }: AreaCha
             labelStyle={{ color: "var(--tf-text-secondary)", marginBottom: 4 }}
             formatter={(value, name) => {
               const num = typeof value === 'number' ? value : 0;
-              return [`₨ ${num.toLocaleString()}`, String(name)];
+              return [`${activeCurrency} ${num.toLocaleString()}`, String(name)];
             }}
           />
           {series.map((s) => (

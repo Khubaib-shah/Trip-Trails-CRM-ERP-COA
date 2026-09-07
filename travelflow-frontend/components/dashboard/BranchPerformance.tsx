@@ -38,7 +38,7 @@ export function BranchPerformance({ isLoading, data }: { isLoading: boolean; dat
                 {
                   key: "revenue",
                   color: "var(--tf-primary)",
-                  label: "Revenue (₨)",
+                  label: `Revenue (${activeCurrency === "PKR" ? "Rs:" : activeCurrency})`,
                 },
               ]}
             />

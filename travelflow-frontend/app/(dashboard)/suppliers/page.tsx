@@ -1,4 +1,5 @@
 "use client";
+import { useBranchStore } from "@/store/branch.store";
 
 import { useState, useEffect } from "react";
 import { Plus, Building2 } from "lucide-react";
@@ -18,7 +19,7 @@ import { DataTableRowActions } from "@/components/tables/DataTableRowActions";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { Button } from "@/components/ui/button";
 import { DrawerForm } from "@/components/forms/DrawerForm";
-import { FormField, FormSelect } from "@/components/forms/FormField";
+import { FormField, FormPhoneField, FormSelect, FormCombobox } from "@/components/forms/FormField";
 import { Form } from "@/components/ui/form";
 import {
   supplierSchema,
@@ -31,6 +32,8 @@ import {
 } from "@/features/suppliers/utils/mapSupplierToForm";
 
 export default function SuppliersPage() {
+  const activeCurrency = useBranchStore((state) => state.activeCurrency);
+
   const router = useRouter();
   const [dateRange, setDateRange] = useState<DateRange | undefined>();
   const { isDrawerOpen, editingId, isEditing, openCreate, openEdit, close } =
@@ -114,7 +117,7 @@ export default function SuppliersPage() {
       ),
       cell: ({ row }) => (
         <div className="text-tf-danger font-medium">
-          ₨ {row.original.balance.toLocaleString()}
+          {activeCurrency} {row.original.balance.toLocaleString()}
         </div>
       ),
     },
@@ -208,7 +211,7 @@ export default function SuppliersPage() {
                 label="Company Name"
                 required
               />
-              <FormSelect
+              <FormCombobox
                 control={form.control}
                 name="category"
                 label="Category"
@@ -236,11 +239,10 @@ export default function SuppliersPage() {
                 label="Email"
                 type="email"
               />
-              <FormField
+              <FormPhoneField
                 control={form.control}
                 name="phone"
                 label="Phone"
-                type="tel"
               />
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

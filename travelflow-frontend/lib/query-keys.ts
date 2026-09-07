@@ -49,12 +49,37 @@ export const queryKeys = {
     expenses: {
       list: (filters: Record<string, any>) => ["finance", "expenses", "list", filters] as const,
     },
-    receipts: {
-      list: (filters: Record<string, any>) => ["finance", "receipts", "list", filters] as const,
-    },
     payments: {
       list: (filters: Record<string, any>) => ["finance", "payments", "list", filters] as const,
     },
+    creditnotes: {
+      list: () => [...queryKeys.finance.all, "creditnotes", "list"] as const,
+      detail: (id: string) => [...queryKeys.finance.all, "creditnotes", "detail", id] as const,
+    },
+  },
+
+  accounting: {
+    all: ["accounting"] as const,
+    journalEntries: {
+      list: () => ["accounting", "journalEntries", "list"] as const,
+      detail: (id: string) => ["accounting", "journalEntries", "detail", id] as const,
+    },
+    accounts: {
+      list: () => ["accounting", "accounts", "list"] as const,
+      balance: (id: string) => ["accounting", "accounts", "balance", id] as const,
+    },
+    reports: {
+      trialBalance: () => ["accounting", "reports", "trialBalance"] as const,
+      profitAndLoss: (dates: any) => ["accounting", "reports", "profitAndLoss", dates] as const,
+      balanceSheet: (date: any) => ["accounting", "reports", "balanceSheet", date] as const,
+    },
+  },
+
+  // --- Payment Schedules ---
+  paymentSchedules: {
+    all: ["paymentSchedules"] as const,
+    list: (bookingId?: string) => ["paymentSchedules", "list", bookingId] as const,
+    detail: (id: string) => ["paymentSchedules", "detail", id] as const,
   },
 
   // --- Suppliers ---

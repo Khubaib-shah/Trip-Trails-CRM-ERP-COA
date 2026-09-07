@@ -8,7 +8,7 @@ export interface Agency {
   address?: string;
   city?: string;
   country: string;
-  currency: string;
+  currency: "PKR" | "AED";
   status: 'active' | 'suspended' | 'inactive';
   createdAt: Date;
   updatedAt: Date;
@@ -22,7 +22,7 @@ export interface Branch {
   city: string;
   address?: string;
   phone?: string;
-  currency?: string;
+  currency?: "PKR" | "AED";
   isHeadOffice: boolean;
   status: 'active' | 'inactive';
   createdAt: Date;

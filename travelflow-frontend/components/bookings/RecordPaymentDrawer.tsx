@@ -1,3 +1,4 @@
+import { useBranchStore } from "@/store/branch.store";
 import { useState, useEffect } from "react";
 import { showSuccess, showError } from "@/lib/toast-utils";
 import { DrawerForm } from "@/components/forms/DrawerForm";
@@ -27,19 +28,22 @@ export function RecordPaymentDrawer({
   booking,
   onSuccess,
 }: RecordPaymentDrawerProps) {
+  const activeCurrency = useBranchStore((state) => state.activeCurrency);
+
   const [amount, setAmount] = useState<number | "">("");
   const [paymentMethod, setPaymentMethod] = useState("bank_transfer");
   const [notes, setNotes] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Set default amount to remaining balance when drawer opens
+  const totalDue = booking?.totalCustomerPayable || booking?.totalSell || 0;
+
   useEffect(() => {
     if (isOpen && booking) {
-      setAmount(booking.balance);
+      setAmount(totalDue);
       setPaymentMethod("bank_transfer");
       setNotes("");
     }
-  }, [isOpen, booking]);
+  }, [isOpen, booking, totalDue]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -51,14 +55,14 @@ export function RecordPaymentDrawer({
       return;
     }
 
-    if (numAmount > booking.balance) {
-      showError(`Amount cannot exceed balance due (₨ ${booking.balance.toLocaleString()})`);
+    if (numAmount > totalDue) {
+      showError(`Amount cannot exceed total due (${activeCurrency} ${totalDue.toLocaleString()})`);
       return;
     }
 
     setIsSubmitting(true);
     try {
-      await API.createReceipt({
+      await API.createCustomerPayment({
         bookingId: booking.id,
         customerId: booking.customerId,
         amount: numAmount,
@@ -66,7 +70,7 @@ export function RecordPaymentDrawer({
         notes,
       });
       showSuccess(
-        `Payment of ₨ ${numAmount.toLocaleString()} recorded successfully`
+        `Payment of ${activeCurrency} ${numAmount.toLocaleString()} recorded successfully`
       );
       onSuccess?.();
       onClose();
@@ -95,64 +99,59 @@ export function RecordPaymentDrawer({
         {/* Summary Card */}
         <div className="bg-tf-surface-2 p-4 rounded-xl border border-tf-border space-y-3">
           <div className="flex justify-between items-center text-sm">
-            <span className="text-tf-text-secondary">Sale Price:</span>
+            <span className="text-tf-text-secondary">Total Amount:</span>
             <span className="font-medium text-tf-text-primary">
-              ₨ {booking.salePrice.toLocaleString()}
-            </span>
-          </div>
-          <div className="flex justify-between items-center text-sm">
-            <span className="text-tf-text-secondary">Amount Received:</span>
-            <span className="font-medium text-tf-success">
-              ₨ {booking.amountReceived.toLocaleString()}
+              {activeCurrency} {totalDue.toLocaleString()}
             </span>
           </div>
           <div className="pt-3 border-t border-tf-border flex justify-between items-center">
             <span className="font-medium text-tf-text-primary">
-              Balance Due:
+              Amount Due:
             </span>
             <span className="font-bold text-tf-danger">
-              ₨ {booking.balance.toLocaleString()}
+              {activeCurrency} {totalDue.toLocaleString()}
             </span>
           </div>
         </div>
 
-        {/* Amount Input */}
-        <div className="space-y-2">
-          <Label className="text-tf-text-primary">Payment Amount</Label>
-          <div className="relative">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-tf-text-secondary">
-              ₨
-            </span>
-            <Input
-              type="number"
-              min={1}
-              max={booking.balance}
-              step="any"
-              required
-              value={amount}
-              onChange={(e) =>
-                setAmount(e.target.value ? Number(e.target.value) : "")
-              }
-              className="pl-8 bg-tf-surface focus-visible:ring-[var(--tf-primary)]"
-              placeholder="0.00"
-            />
-          </div>
-        </div>
+        <div className="flex justify-between gap-3">
 
-        {/* Payment Method */}
-        <div className="space-y-2">
-          <Label className="text-tf-text-primary">Payment Method</Label>
-          <Select value={paymentMethod} onValueChange={setPaymentMethod}>
-            <SelectTrigger className="bg-tf-surface focus:ring-[var(--tf-primary)]">
-              <SelectValue placeholder="Select method" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="cash">Cash</SelectItem>
-              <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
-              <SelectItem value="credit_card">Credit Card</SelectItem>
-              <SelectItem value="cheque">Cheque</SelectItem>
-            </SelectContent>
-          </Select>
+          {/* Amount Input */}
+          <div className="space-y-2 w-full">
+            <Label className="text-tf-text-primary">Payment Amount</Label>
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-tf-text-secondary">{activeCurrency}</span>
+              <Input
+                type="number"
+                min={1}
+                max={totalDue}
+                step="any"
+                required
+                value={amount}
+                onChange={(e) =>
+                  setAmount(e.target.value ? Number(e.target.value) : "")
+                }
+                className="pl-12 bg-tf-surface focus-visible:ring-[var(--tf-primary)]"
+                placeholder="0.00"
+              />
+            </div>
+          </div>
+
+          {/* Payment Method */}
+          <div className="space-y-2 w-full">
+            <Label className="text-tf-text-primary">Payment Method</Label>
+            <Select value={paymentMethod} onValueChange={setPaymentMethod} >
+              <SelectTrigger className="bg-tf-surface focus:ring-[var(--tf-primary)] w-full">
+                <SelectValue placeholder="Select method" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="cash">Cash</SelectItem>
+                <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
+                <SelectItem value="credit_card">Credit Card</SelectItem>
+                <SelectItem value="cheque">Cheque</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
 
         {/* Notes */}

@@ -78,7 +78,7 @@ export function QuotationPreviewModal({
             </span>
           </p>
           <p className="text-lg font-bold text-tf-primary">
-            Rs {quotation.grandTotal?.toLocaleString()}
+            {(quotation as any).currency || "PKR"} {quotation.grandTotal?.toLocaleString()}
           </p>
         </div>
         <DialogFooter className="w-full sm:justify-between flex flex-col sm:flex-row gap-3 pt-4">

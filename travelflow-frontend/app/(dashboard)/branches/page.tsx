@@ -5,13 +5,13 @@ import { GitBranch, Plus, Building2, MapPin } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { showSuccess, showError } from "@/lib/toast-utils";
-import { formatCurrencyPKR } from "@/lib/utils";
+
 import { BranchFormValues } from "@/lib/api-client";
 import { useBranches, useCreateBranch, useUpdateBranch } from "@/features/shared/hooks/queries";
 import type { Branch } from "@/types";
 import { Button } from "@/components/ui/button";
 import { DrawerForm } from "@/components/forms/DrawerForm";
-import { FormField, FormSelect } from "@/components/forms/FormField";
+import { FormField, FormPhoneField, FormSelect } from "@/components/forms/FormField";
 import { Form } from "@/components/ui/form";
 import { useEntityDrawer } from "@/hooks/use-entity-drawer";
 
@@ -151,7 +151,7 @@ export default function BranchesPage() {
                       address: branch.address ?? "",
                       phone: branch.phone ?? "",
                       currency: branch.currency ?? "PKR",
-                      isHeadOffice: branch.isHeadOffice,
+                      isHeadOffice: String(branch.isHeadOffice) as any,
                       status: branch.status,
                     });
                     openEdit(branch.id);
@@ -203,11 +203,10 @@ export default function BranchesPage() {
               required
             />
             <FormField control={form.control} name="address" label="Address" />
-            <FormField
+            <FormPhoneField
               control={form.control}
               name="phone"
               label="Phone"
-              type="tel"
             />
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <FormSelect

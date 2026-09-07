@@ -1,4 +1,5 @@
 "use client";
+import { useBranchStore } from "@/store/branch.store";
 
 import {
   Cell,
@@ -22,6 +23,8 @@ export function DonutChart({
   centerLabel,
   centerValue,
 }: DonutChartProps) {
+  const activeCurrency = useBranchStore((state) => state.activeCurrency);
+
   return (
     <div
       style={{ width: "100%", height: height }}
@@ -64,7 +67,7 @@ export function DonutChart({
             }}
             formatter={(value, name) => {
               const num = typeof value === "number" ? value : 0;
-              return [`₨ ${formatShort(num)}`, String(name)];
+              return [`${activeCurrency} ${formatShort(num)}`, String(name)];
             }}
           />
         </RechartsPieChart>

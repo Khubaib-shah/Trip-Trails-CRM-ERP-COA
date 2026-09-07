@@ -32,6 +32,11 @@ export interface DashboardStats {
     time: string | Date;
   }[];
 
+  profitByCategory?: {
+    name: string;
+    value: number;
+  }[];
+
   branchPerformance?: {
     name: string;
     code: string;

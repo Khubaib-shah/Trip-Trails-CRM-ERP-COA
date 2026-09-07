@@ -20,7 +20,7 @@ import type {
   User,
   DashboardStats,
   Expense,
-  Receipt,
+  CustomerPayment,
   BookingDocument,
 } from "@/types";
 import type { Role } from "@/types/role";
@@ -40,26 +40,38 @@ import type { QuotationFormValues } from "@/features/quotations/schemas/quotatio
 import { ApiError } from "./api-error";
 
 export interface CreateBookingInput {
-  customerId: string;
-  supplierId: string;
+  customerId?: string;
   branchId?: string;
   agentId?: string;
   leadId?: string;
-  airline: string;
-  departureCity: string;
-  arrivalCity: string;
+  title: string;
   departureDate: string;
   returnDate?: string;
-  pnr?: string;
-  ticketNumber?: string;
-  costPrice: number;
-  salePrice: number;
+  expectedAdults?: number;
+  expectedChildren?: number;
+  expectedInfants?: number;
+  bookingStatus?: Booking["bookingStatus"];
   paymentStatus: Booking["paymentStatus"];
-  amountReceived?: number;
-  paymentMethod?: string;
   notes?: string;
-  adults?: number;
-  children?: number;
+  terms?: string;
+  termsTemplateId?: string | null;
+  services?: Array<{
+    serviceCategory: string;
+    title: string;
+    description?: string;
+    supplierId?: string;
+    supplierName?: string;
+    costPrice?: number;
+    sellingPrice?: number;
+    supplierInvoiceAmount?: number | null;
+    taxTreatment?: string;
+    vatRate?: number;
+    quantity?: number;
+    unit?: string;
+    status?: string;
+    financialStatus?: string;
+    serviceDetails?: Record<string, unknown>;
+  }>;
 }
 import type { LeadFormValues } from "@/features/leads/schemas/lead.schema";
 import type { CustomerFormValues } from "@/features/customers/schemas/customer.schema";
@@ -108,7 +120,7 @@ async function request<T>(
   path: string,
   body?: unknown,
   retried = false,
-  options?: { skipBranchScope?: boolean }
+  options?: { skipBranchScope?: boolean },
 ): Promise<T> {
   let finalPath = path;
 
@@ -177,7 +189,7 @@ async function request<T>(
               const qc = getQueryClient();
               qc.cancelQueries();
               qc.clear();
-              
+
               const { useAuthStore } = await import("@/store/auth.store");
               useAuthStore.getState().clearUser();
             } catch (e) {}
@@ -207,7 +219,10 @@ async function request<T>(
     json = await res.json();
   } catch (e) {
     if (!res.ok) {
-      throw new ApiError(`Server Error: ${res.status} ${res.statusText}`, res.status);
+      throw new ApiError(
+        `Server Error: ${res.status} ${res.statusText}`,
+        res.status,
+      );
     }
     throw new ApiError("Received invalid JSON from server");
   }
@@ -221,10 +236,16 @@ async function request<T>(
   return (json as { data: T }).data;
 }
 
-const get = <T>(path: string, options?: { skipBranchScope?: boolean }) => request<T>("GET", path, undefined, false, options);
+const get = <T>(path: string, options?: { skipBranchScope?: boolean }) =>
+  request<T>("GET", path, undefined, false, options);
 const post = async <T>(path: string, body: unknown) => {
   const res = await request<T>("POST", path, body);
   if (!path.startsWith("/auth")) notifyInvalidation();
+  return res;
+};
+const put = async <T>(path: string, body: unknown) => {
+  const res = await request<T>("PUT", path, body);
+  notifyInvalidation();
   return res;
 };
 const patch = async <T>(path: string, body: unknown) => {
@@ -245,9 +266,15 @@ function reviveItem<T>(item: unknown): T {
 
 function reviveList<T>(items: unknown): T[] {
   // Backwards compatibility for paginated responses { data: T[], total: ... }
-  const arr = (items && typeof items === 'object' && 'data' in items && Array.isArray((items as any).data))
-    ? (items as any).data
-    : Array.isArray(items) ? items : [];
+  const arr =
+    items &&
+    typeof items === "object" &&
+    "data" in items &&
+    Array.isArray((items as any).data)
+      ? (items as any).data
+      : Array.isArray(items)
+        ? items
+        : [];
   return arr.map((i: any) => reviveItem<T>(i));
 }
 
@@ -286,8 +313,13 @@ injectAuthActions(login, logoutApi, getMe);
 
 // ─── Public ApiClient object — same interface as MockAPI ──────────────────────
 export const ApiClient = {
+  get,
+  post,
+  patch,
+  delete: del,
   // ── Dashboard ──
-  getDashboardStats: (dates?: { from?: Date; to?: Date }) => get<DashboardStats>(buildDateQuery("/dashboard/stats", dates)),
+  getDashboardStats: (dates?: { from?: Date; to?: Date }) =>
+    get<DashboardStats>(buildDateQuery("/dashboard/stats", dates)),
   getAnalytics: (params?: { timeRange?: string; branchId?: string }) => {
     const searchParams = new URLSearchParams();
     if (params?.timeRange) searchParams.set("timeRange", params.timeRange);
@@ -295,12 +327,13 @@ export const ApiClient = {
     const queryString = searchParams.toString();
     return get<unknown>(
       `/dashboard/analytics${queryString ? `?${queryString}` : ""}`,
-      { skipBranchScope: true }
+      { skipBranchScope: true },
     );
   },
 
   // ── Leads ──
-  getLeads: (dates?: { from?: Date; to?: Date }) => get<unknown[]>(buildDateQuery("/leads", dates)).then(reviveList<Lead>),
+  getLeads: (dates?: { from?: Date; to?: Date }) =>
+    get<unknown[]>(buildDateQuery("/leads", dates)).then(reviveList<Lead>),
 
   getLead: (id: string) => get<unknown>(`/leads/${id}`).then(reviveItem<Lead>),
 
@@ -331,7 +364,10 @@ export const ApiClient = {
   deleteLead: (id: string) => del<{ deleted: boolean }>(`/leads/${id}`),
 
   // ── Customers ──
-  getCustomers: (dates?: { from?: Date; to?: Date }) => get<unknown[]>(buildDateQuery("/customers", dates)).then(reviveList<Customer>),
+  getCustomers: (dates?: { from?: Date; to?: Date }) =>
+    get<unknown[]>(buildDateQuery("/customers", dates)).then(
+      reviveList<Customer>,
+    ),
 
   getCustomer: (id: string) =>
     get<unknown>(`/customers/${id}`).then(reviveItem<Customer>),
@@ -381,7 +417,10 @@ export const ApiClient = {
     del<boolean>(`/customers/documents/${id}`),
 
   // ── Bookings ──
-  getBookings: (dates?: { from?: Date; to?: Date }) => get<unknown[]>(buildDateQuery("/bookings", dates)).then(reviveList<Booking>),
+  getBookings: (dates?: { from?: Date; to?: Date }) =>
+    get<unknown[]>(buildDateQuery("/bookings", dates)).then(
+      reviveList<Booking>,
+    ),
 
   getBooking: (id: string) =>
     get<unknown>(`/bookings/${id}`).then(reviveItem<Booking>),
@@ -389,17 +428,13 @@ export const ApiClient = {
   getBookingActivities: (id: string) =>
     get<any[]>(`/bookings/${id}/activities`).then(reviveList<any>),
 
-
   createBooking: (input: CreateBookingInput) =>
     post<unknown>("/bookings", input).then(reviveItem<Booking>),
 
   createBookingFromForm: (values: BookingFormValues) =>
     post<unknown>("/bookings", {
       customerId: values.customerId,
-      supplierId: values.supplierId,
-      airline: values.airline,
-      departureCity: values.departureCity,
-      arrivalCity: values.arrivalCity,
+      title: values.title,
       departureDate:
         values.departureDate instanceof Date
           ? values.departureDate.toISOString()
@@ -408,32 +443,45 @@ export const ApiClient = {
         values.returnDate instanceof Date
           ? values.returnDate.toISOString()
           : values.returnDate,
-      pnr: values.pnr,
-      ticketNumber: values.ticketNumber,
-      costPrice: values.costPrice,
-      salePrice: values.salePrice,
+      expectedAdults: values.expectedAdults,
+      expectedChildren: values.expectedChildren,
+      expectedInfants: values.expectedInfants,
+      bookingStatus: values.bookingStatus,
       paymentStatus: values.paymentStatus,
-      amountReceived: values.amountReceived,
       notes: values.notes,
+      terms: values.terms,
+      termsTemplateId: values.termsTemplateId || undefined,
+      services: values.services,
     }).then(reviveItem<Booking>),
 
-  updateBooking: (id: string, values: BookingFormValues) =>
+  updateBooking: (id: string, values: Partial<BookingFormValues>) =>
     patch<unknown>(`/bookings/${id}`, {
       ...values,
-      departureDate:
-        values.departureDate instanceof Date
-          ? values.departureDate.toISOString()
-          : values.departureDate,
-      returnDate:
-        values.returnDate instanceof Date
-          ? values.returnDate?.toISOString()
-          : values.returnDate,
+      ...(values.departureDate
+        ? {
+            departureDate:
+              values.departureDate instanceof Date
+                ? values.departureDate.toISOString()
+                : values.departureDate,
+          }
+        : {}),
+      ...(values.returnDate
+        ? {
+            returnDate:
+              values.returnDate instanceof Date
+                ? values.returnDate.toISOString()
+                : values.returnDate,
+          }
+        : {}),
     }).then(reviveItem<Booking>),
 
   deleteBooking: (id: string) => del<{ deleted: boolean }>(`/bookings/${id}`),
 
   // ── Suppliers ──
-  getSuppliers: (dates?: { from?: Date; to?: Date }) => get<unknown[]>(buildDateQuery("/suppliers", dates)).then(reviveList<Supplier>),
+  getSuppliers: (dates?: { from?: Date; to?: Date }) =>
+    get<unknown[]>(buildDateQuery("/suppliers", dates)).then(
+      reviveList<Supplier>,
+    ),
 
   getSupplier: (id: string) =>
     get<unknown>(`/suppliers/${id}`).then(reviveItem<Supplier>),
@@ -453,7 +501,10 @@ export const ApiClient = {
   deleteSupplier: (id: string) => del<{ deleted: boolean }>(`/suppliers/${id}`),
 
   // ── Branches ──
-  getBranches: () => get<unknown[]>("/branches", { skipBranchScope: true }).then(reviveList<Branch>),
+  getBranches: () =>
+    get<unknown[]>("/branches", { skipBranchScope: true }).then(
+      reviveList<Branch>,
+    ),
 
   getBranch: (id: string) =>
     get<unknown>(`/branches/${id}`).then(reviveItem<Branch>),
@@ -477,12 +528,18 @@ export const ApiClient = {
   updateUser: (id: string, values: UserFormValues) =>
     patch<unknown>(`/users/${id}`, values).then(reviveItem<User>),
 
+  resetUserPassword: (id: string, newPassword?: string) =>
+    post<unknown>(`/users/${id}/reset-password`, { newPassword }).then(reviveItem<User>),
+
   deleteUser: (id: string) => del<{ deleted: boolean }>(`/users/${id}`),
 
   getAgents: () => get<unknown[]>("/users/agents").then(reviveList<User>),
 
   // ── Expenses ──
-  getExpenses: (dates?: { from?: Date; to?: Date }) => get<unknown[]>(buildDateQuery("/expenses", dates)).then(reviveList<Expense>),
+  getExpenses: (dates?: { from?: Date; to?: Date }) =>
+    get<unknown[]>(buildDateQuery("/expenses", dates)).then(
+      reviveList<Expense>,
+    ),
 
   getExpense: (id: string) =>
     get<unknown>(`/expenses/${id}`).then(reviveItem<Expense>),
@@ -521,16 +578,22 @@ export const ApiClient = {
 
   deleteRole: (roleId: string) => del<{ deleted: boolean }>(`/roles/${roleId}`),
 
-  // ── Receipts ──
-  getReceipts: (dates?: { from?: Date; to?: Date }) => get<unknown[]>(buildDateQuery("/receipts", dates)).then(reviveList<Receipt>),
+  // ── Payments ──
+  getPayments: (dates?: { from?: Date; to?: Date }) =>
+    get<unknown[]>(buildDateQuery("/payments", dates)).then(
+      reviveList<CustomerPayment>,
+    ),
 
-  createReceipt: (data: {
-    bookingId: string;
+  getPayment: (id: string) =>
+    get<unknown>(`/payments/${id}`).then(reviveItem<CustomerPayment>),
+
+  createCustomerPayment: (data: {
+    bookingId?: string;
     customerId: string;
     amount: number;
     paymentMethod: string;
     notes?: string;
-  }) => post<unknown>("/receipts", data).then(reviveItem<Receipt>),
+  }) => post<unknown>("/payments", data).then(reviveItem<CustomerPayment>),
 
   // ── Booking Documents ──
   getBookingDocuments: (bookingId: string) =>
@@ -551,8 +614,8 @@ export const ApiClient = {
 
   // ── Quotations ──
   getQuotations: (dates?: { from?: Date; to?: Date }) =>
-    get<{ items: unknown[] }>(buildDateQuery("/quotations", dates)).then((res) =>
-      reviveList<Quotation>(res.items as any),
+    get<{ items: unknown[] }>(buildDateQuery("/quotations", dates)).then(
+      (res) => reviveList<Quotation>(res.items as any),
     ),
 
   getQuotation: (id: string) =>
@@ -592,8 +655,8 @@ export const ApiClient = {
 
   // ── Templates ──
   getTemplates: (type?: TemplateType) =>
-    get<unknown[]>(type ? `/templates?type=${type}` : "/templates").then((res) =>
-      reviveList<Template>(res as any),
+    get<unknown[]>(type ? `/templates?type=${type}` : "/templates").then(
+      (res) => reviveList<Template>(res as any),
     ),
 
   createTemplate: (payload: CreateTemplatePayload) =>
@@ -615,23 +678,127 @@ export const ApiClient = {
 
   // ── Settings ──
   getSettings: () => get<unknown>("/settings").then(reviveItem<any>),
-  updateSettings: (data: any) => patch<unknown>("/settings", data).then(reviveItem<any>),
+  updateSettings: (data: any) =>
+    patch<unknown>("/settings", data).then(reviveItem<any>),
 
   // ── Notifications ──
-  getNotifications: (page = 1, limit = 20) => get<any>(`/notifications?page=${page}&limit=${limit}`).then(res => ({
-    ...res, data: reviveList<any>(res.data || res)
-  })),
-  markNotificationRead: (id: string) => patch<any>(`/notifications/${id}/read`, {}),
+  getNotifications: (page = 1, limit = 20) =>
+    get<any>(`/notifications?page=${page}&limit=${limit}`).then((res) => ({
+      ...res,
+      data: reviveList<any>(res.data || res),
+    })),
+  markNotificationRead: (id: string) =>
+    patch<any>(`/notifications/${id}/read`, {}),
   markAllNotificationsRead: () => patch<any>("/notifications/read-all", {}),
   deleteNotification: (id: string) => del<any>(`/notifications/${id}`),
 
   // ── Reports & Ledger ──
   getCustomerLedger: (id: string) => get<any>(`/customers/${id}/ledger`),
   getSupplierStatement: (id: string) => get<any>(`/suppliers/${id}/statement`),
+  getARLedger: () => get<any>("/reports/ar-ledger"),
+  getAPLedger: () => get<any>("/reports/ap-ledger"),
 
   // ── Invoices ──
-  getInvoices: () => get<any>("/invoices").then(res => reviveList<any>(res.data || res)),
+  getInvoices: () =>
+    get<any>("/invoices").then((res) => reviveList<any>(res.data || res)),
   getInvoice: (id: string) => get<any>(`/invoices/${id}`),
-  generateInvoiceFromBooking: (bookingId: string) => post<any>(`/invoices/from-booking/${bookingId}`, {}),
+  generateInvoiceFromBooking: (bookingId: string) =>
+    post<any>(`/invoices/from-booking/${bookingId}`, {}),
   markInvoicePaid: (id: string) => post<any>(`/invoices/${id}/mark-paid`, {}),
+  updateInvoice: (id: string, data: any) => patch<any>(`/invoices/${id}`, data),
+  deleteInvoice: (id: string) => del<any>(`/invoices/${id}`),
+  updateInvoiceStatus: (id: string, status: string) =>
+    patch<any>(`/invoices/${id}/status`, { status }),
+
+  // ── Credit Notes ──
+  getCreditNotes: () =>
+    get<any>("/creditnotes").then((res) => reviveList<any>(res.data || res)),
+  getCreditNote: (id: string) => get<any>(`/creditnotes/${id}`),
+  createCreditNote: (data: {
+    invoiceId: string;
+    amount: number;
+    reason: string;
+    notes?: string;
+    bookingId?: string;
+  }) => post<any>("/creditnotes", data),
+  applyCreditNote: (id: string) => post<any>(`/creditnotes/${id}/apply`, {}),
+
+  // ── Payment Schedules ──
+  getPaymentSchedules: (bookingId?: string) => {
+    const params = bookingId ? `?bookingId=${bookingId}` : "";
+    return get<any>(`/payment-schedules${params}`).then(
+      (res) => res.data?.data || res.data || res,
+    );
+  },
+  getPaymentSchedule: (id: string) => get<any>(`/payment-schedules/${id}`),
+  createPaymentSchedule: (data: any) => post<any>("/payment-schedules", data),
+  updateScheduleItemStatus: (
+    itemId: string,
+    data: { status: string; customerPaymentId?: string },
+  ) => patch<any>(`/payment-schedules/items/${itemId}`, data),
+  deletePaymentSchedule: (id: string) => del<any>(`/payment-schedules/${id}`),
+
+  // ── Accounting ──
+  getJournalEntries: () =>
+    get<any>("/accounting/journal-entries").then(
+      (res) => res.data?.data || res.data || res,
+    ),
+  getJournalEntry: (id: string) =>
+    get<any>(`/accounting/journal-entries/${id}`),
+  getChartOfAccounts: () =>
+    get<any>("/accounting/accounts").then(
+      (res) => res.data?.data || res.data || res,
+    ),
+  createAccount: (data: any) => post<any>("/accounting/accounts", data),
+  updateAccount: (id: string, data: any) => put<any>(`/accounting/accounts/${id}`, data),
+  toggleAccountStatus: (id: string, isActive?: boolean) =>
+    patch<any>(`/accounting/accounts/${id}/status`, { isActive }),
+  deleteAccount: (id: string) => del<any>(`/accounting/accounts/${id}`),
+  confirmSupplierInvoice: (data: {
+    bookingServiceId: string;
+    supplierInvoiceAmount: number;
+    reference?: string;
+    date?: Date;
+  }) => post<any>("/accounting/supplier-invoices/confirm", data),
+  getAccountBalance: (id: string) =>
+    get<any>(`/accounting/accounts/${id}/balance`),
+  getTrialBalance: () => get<any>("/accounting/trial-balance"),
+  createJournalEntry: (data: {
+    description: string;
+    date: string;
+    reference?: string;
+    lines: {
+      accountId: string;
+      debit: number;
+      credit: number;
+      description?: string;
+    }[];
+  }) => post<any>("/accounting/journal-entries", data),
+  reverseJournalEntry: (id: string, reason?: string) =>
+    post<any>(`/accounting/journal-entries/${id}/reverse`, {
+      reason: reason || "Reversal",
+    }),
+
+  // ── Reports ──
+  getProfitAndLoss: (startDate?: Date, endDate?: Date) => {
+    const params = new URLSearchParams();
+    if (startDate) params.append("startDate", startDate.toISOString());
+    if (endDate) params.append("endDate", endDate.toISOString());
+    const query = params.toString();
+    return get<any>(`/reports/profit-and-loss${query ? "?" + query : ""}`);
+  },
+  getBalanceSheet: (asOfDate?: Date) => {
+    const params = new URLSearchParams();
+    if (asOfDate) params.append("asOfDate", asOfDate.toISOString());
+    const query = params.toString();
+    return get<any>(`/reports/balance-sheet${query ? "?" + query : ""}`);
+  },
+
+  // ── Bulk Import ──
+  importSales: (rows: any[], branchId?: string, customerName?: string) =>
+    post<any>("/import/sales", { rows, branchId, customerName }),
+  importExpenses: (rows: any[], branchId?: string) =>
+    post<any>("/import/expenses", { rows, branchId }),
+  getImportTemplate: (type: "sales" | "expenses") =>
+    get<any>(`/import/template/${type}`),
 };

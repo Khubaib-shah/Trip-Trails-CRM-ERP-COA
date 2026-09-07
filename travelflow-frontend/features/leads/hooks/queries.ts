@@ -11,10 +11,11 @@ export function useLeads(filters?: any) {
   });
 }
 
-export function useLead(id: string) {
+export function useLead(id?: string | null) {
   return useQuery({
-    queryKey: queryKeys.leads.detail(id),
-    queryFn: () => API.getLead(id),
+    queryKey: queryKeys.leads.detail(id || ""),
+    queryFn: () => API.getLead(id!),
+    enabled: !!id,
     staleTime: 60_000,
   });
 }

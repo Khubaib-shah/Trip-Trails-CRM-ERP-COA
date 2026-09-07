@@ -32,7 +32,7 @@ export function requirePermission(requiredPermission: string) {
       }
 
       const permissions = role.permissions as string[];
-      if (!permissions.includes(requiredPermission)) {
+      if (!permissions.includes(requiredPermission) && !permissions.includes("all")) {
         return next(ApiError.forbidden(`Requires permission: ${requiredPermission}`));
       }
 

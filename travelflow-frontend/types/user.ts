@@ -25,5 +25,6 @@ export interface User {
     name: string;
     code: string;
     city: string;
+    currency?: "PKR" | "AED";
   };
 }

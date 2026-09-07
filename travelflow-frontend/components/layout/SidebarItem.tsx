@@ -17,9 +17,9 @@ interface SidebarItemProps {
 
 export function SidebarItem({ item, isOpen }: SidebarItemProps) {
   const pathname = usePathname();
-  // Simple active check: if pathname starts with item.href, it's active
-  const isActive =
-    pathname === item.href || pathname.startsWith(`${item.href}/`);
+  const isActive = item.exact
+    ? pathname === item.href
+    : pathname === item.href || pathname.startsWith(`${item.href}/`);
 
   const link = (
     <Link

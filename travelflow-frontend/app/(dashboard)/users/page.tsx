@@ -17,7 +17,7 @@ import { TableEntityLink } from "@/components/shared/TableEntityLink";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { Button } from "@/components/ui/button";
 import { DrawerForm } from "@/components/forms/DrawerForm";
-import { FormField, FormSelect } from "@/components/forms/FormField";
+import { FormField, FormPhoneField, FormSelect, FormCombobox } from "@/components/forms/FormField";
 import { Form } from "@/components/ui/form";
 import {
   Dialog,
@@ -283,14 +283,13 @@ export default function UsersPage() {
               type="email"
               required
             />
-            <FormField
+            <FormPhoneField
               control={form.control}
               name="phone"
               label="Phone"
-              type="tel"
             />
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <FormSelect
+              <FormCombobox
                 control={form.control}
                 name="role"
                 label="Role"
@@ -300,7 +299,7 @@ export default function UsersPage() {
                   value: r.name,
                 }))}
               />
-              <FormSelect
+              <FormCombobox
                 control={form.control}
                 name="branchId"
                 label="Branch"

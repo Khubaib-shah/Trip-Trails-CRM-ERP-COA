@@ -1,12 +1,12 @@
 import { z } from "zod";
 import { leadStatusValues } from "@/features/leads/constants";
 
-const phoneRegex = /^(\+92|0)3[0-9]{2}[-\s]?[0-9]{7}$/;
+const phoneRegex = /^\+?[1-9]\d{6,14}$/;
 
 export const leadSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters").max(60),
-  phone: z.string().regex(phoneRegex, "Enter a valid Pakistani number (03XX-XXXXXXX)"),
-  whatsapp: z.string().regex(phoneRegex, "Enter a valid Pakistani number").optional().or(z.literal("")),
+  phone: z.string().regex(phoneRegex, "Enter a valid phone number with country code (e.g. +923001234567)"),
+  whatsapp: z.string().regex(phoneRegex, "Enter a valid phone number with country code").optional().or(z.literal("")),
   email: z.string().email("Invalid email address").optional().or(z.literal("")),
   destination: z.string().min(2, "Destination is required"),
   travelDate: z.string().optional(),

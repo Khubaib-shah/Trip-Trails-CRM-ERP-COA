@@ -29,7 +29,7 @@ import { DataTableRowActions } from "@/components/tables/DataTableRowActions";
 import { TableEntityLink } from "@/components/shared/TableEntityLink";
 import { SettleBalanceDrawer } from "@/components/suppliers/SettleBalanceDrawer";
 import { DrawerForm } from "@/components/forms/DrawerForm";
-import { FormField, FormSelect } from "@/components/forms/FormField";
+import { FormField, FormPhoneField, FormSelect, FormCombobox } from "@/components/forms/FormField";
 import { Form } from "@/components/ui/form";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@/lib/zod-resolver";
@@ -53,6 +53,7 @@ export default function SupplierDetailPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSettleDrawerOpen, setIsSettleDrawerOpen] = useState(false);
   const [isEditDrawerOpen, setIsEditDrawerOpen] = useState(false);
+  const [statement, setStatement] = useState<any>(null);
 
   const form = useForm<SupplierFormValues>({
     resolver: zodResolver(supplierSchema),
@@ -64,8 +65,12 @@ export default function SupplierDetailPage() {
     const data = await API.getSupplier(id);
     setSupplier(data);
     if (data) {
-      const allBookings = await API.getBookings();
-      setBookings(allBookings.filter((b) => b.supplierId === id));
+      const [allBookings, stmt] = await Promise.all([
+        API.getBookings(),
+        API.getSupplierStatement(id),
+      ]);
+      setBookings(allBookings.filter((b) => b.services?.some((s) => s.supplierId === id)));
+      setStatement(stmt);
     }
     setIsLoading(false);
   };
@@ -110,11 +115,11 @@ export default function SupplierDetailPage() {
       ),
     },
     {
-      accessorKey: "pnr",
-      header: "PNR",
+      accessorKey: "title",
+      header: "Title",
       cell: ({ row }) => (
-        <div className="font-mono text-xs text-tf-text-secondary">
-          {row.original.pnr}
+        <div className="font-medium text-xs text-tf-text-primary">
+          {row.original.title || "Untitled"}
         </div>
       ),
     },
@@ -130,25 +135,27 @@ export default function SupplierDetailPage() {
       ),
     },
     {
-      accessorKey: "airline",
-      header: "Route",
+      accessorKey: "services",
+      header: "Services",
       cell: ({ row }) => (
         <div className="flex flex-col">
-          <span className="font-medium text-tf-text-primary">
-            {row.original.airline}
-          </span>
-          <span className="text-xs text-tf-text-muted">
-            {row.original.departureCity} → {row.original.arrivalCity}
-          </span>
+          {row.original.services?.filter((s) => s.supplierId === id).map((s) => (
+            <span key={s.id} className="text-xs text-tf-text-primary">
+              {s.title} — {formatCurrency(s.costPrice, activeCurrency)}
+            </span>
+          ))}
+          {(!row.original.services || row.original.services.filter((s) => s.supplierId === id).length === 0) && (
+            <span className="text-xs text-tf-text-muted">No services</span>
+          )}
         </div>
       ),
     },
     {
-      accessorKey: "costPrice",
+      accessorKey: "totalCost",
       header: "Payable",
       cell: ({ row }) => (
         <div className="font-semibold text-sm text-tf-danger">
-          {formatCurrency(row.original.costPrice, activeCurrency)}
+          {formatCurrency(row.original.totalCost || 0, activeCurrency)}
         </div>
       ),
     },
@@ -292,7 +299,7 @@ export default function SupplierDetailPage() {
                 Current Ledger Balance
               </span>
               <CurrencyDisplay
-                amount={supplier.balance}
+                amount={statement?.finalBalance ?? supplier.balance}
                 className="font-bold text-tf-danger text-xl"
               />
             </div>
@@ -339,34 +346,48 @@ export default function SupplierDetailPage() {
               Make Payment <ArrowRight className="ml-2 w-4 h-4" />
             </Button>
           </div>
-          <div className="space-y-4">
-            <div className="flex justify-between items-center p-4 border border-tf-border rounded-lg bg-tf-surface-2">
-              <div>
-                <p className="font-semibold text-sm text-tf-text-primary">
-                  Booking Payable - BK-2024-001
-                </p>
-                <p className="text-xs text-tf-text-muted mt-1">
-                  {new Date().toLocaleDateString()}
-                </p>
-              </div>
-              <span className="text-tf-danger font-mono font-bold text-sm">
-                + {formatCurrency(85000, activeCurrency)}
-              </span>
+          {!statement?.entries || statement.entries.length === 0 ? (
+            <div className="text-center py-12 border border-tf-border rounded-lg">
+              <p className="text-tf-text-secondary">No ledger entries found.</p>
             </div>
-            <div className="flex justify-between items-center p-4 border border-tf-border rounded-lg bg-tf-surface-2">
-              <div>
-                <p className="font-semibold text-sm text-tf-text-primary">
-                  Bank Transfer - Settle
-                </p>
-                <p className="text-xs text-tf-text-muted mt-1">
-                  {new Date(2025, 6, 8).toLocaleDateString()}
-                </p>
-              </div>
-              <span className="text-tf-success font-mono font-bold text-sm">
-                - {formatCurrency(50000, activeCurrency)}
-              </span>
+          ) : (
+            <div className="space-y-4">
+              {statement.entries.map((entry: any, index: number) => (
+                <div
+                  key={index}
+                  className="flex justify-between items-center p-4 border border-tf-border rounded-lg bg-tf-surface-2"
+                >
+                  <div>
+                    <p className="font-semibold text-sm text-tf-text-primary">
+                      {entry.description}
+                    </p>
+                    <p className="text-xs text-tf-text-muted mt-1">
+                      {entry.type && <span className="mr-2">{entry.type}</span>}
+                      {entry.reference && <span className="mr-2 text-tf-text-muted">Ref: {entry.reference}</span>}
+                      {new Date(entry.date).toLocaleDateString()}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    {entry.debit > 0 && (
+                      <p className="text-tf-danger font-mono font-bold text-sm">
+                        + {formatCurrency(entry.debit, activeCurrency)}
+                      </p>
+                    )}
+                    {entry.credit > 0 && (
+                      <p className="text-tf-success font-mono font-bold text-sm">
+                        - {formatCurrency(entry.credit, activeCurrency)}
+                      </p>
+                    )}
+                    {entry.balance !== undefined && (
+                      <p className="text-xs text-tf-text-muted mt-1">
+                        Balance: {formatCurrency(entry.balance, activeCurrency)}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              ))}
             </div>
-          </div>
+          )}
         </TabsContent>
 
         <TabsContent
@@ -445,7 +466,7 @@ export default function SupplierDetailPage() {
                 label="Company Name"
                 required
               />
-              <FormSelect
+              <FormCombobox
                 control={form.control}
                 name="category"
                 label="Category"
@@ -473,11 +494,10 @@ export default function SupplierDetailPage() {
                 label="Email"
                 type="email"
               />
-              <FormField
+              <FormPhoneField
                 control={form.control}
                 name="phone"
                 label="Phone"
-                type="tel"
               />
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

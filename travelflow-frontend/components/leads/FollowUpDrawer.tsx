@@ -3,10 +3,10 @@
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@/lib/zod-resolver";
 import { z } from "zod";
-import { showSuccess } from "@/lib/toast-utils";
+import { showSuccess, showError } from "@/lib/toast-utils";
 import { DrawerForm } from "@/components/forms/DrawerForm";
 import { FormField, FormTextArea } from "@/components/forms/FormField";
-import { FormSelect } from "@/components/forms/FormField";
+import { FormSelect, FormCombobox } from "@/components/forms/FormField";
 import { Form } from "@/components/ui/form";
 import { Lead } from "@/types";
 import { API } from "@/lib/data-source";
@@ -39,22 +39,26 @@ export function FollowUpDrawer({ lead, isOpen, onClose, onSaved }: FollowUpDrawe
   });
 
   const onSubmit = async (values: FollowUpValues) => {
-    await API.addLeadActivity(lead.id, {
-      type: values.type,
-      description: values.notes,
-      outcome: values.outcome,
-      createdBy: "Ahmad Khan",
-      createdAt: new Date(values.datetime),
-    });
-    showSuccess("Follow-up added");
-    form.reset({
-      type: "call",
-      datetime: new Date().toISOString().slice(0, 16),
-      notes: "",
-      outcome: "reached",
-    });
-    onSaved();
-    onClose();
+    try {
+      await API.addLeadActivity(lead.id, {
+        type: values.type,
+        description: values.notes,
+        outcome: values.outcome,
+        createdBy: "Ahmad Khan",
+        createdAt: new Date(values.datetime),
+      });
+      showSuccess("Follow-up added");
+      form.reset({
+        type: "call",
+        datetime: new Date().toISOString().slice(0, 16),
+        notes: "",
+        outcome: "reached",
+      });
+      onSaved();
+      onClose();
+    } catch (error: unknown) {
+      showError(error, { context: "Adding follow-up" });
+    }
   };
 
   return (
@@ -69,7 +73,7 @@ export function FollowUpDrawer({ lead, isOpen, onClose, onSaved }: FollowUpDrawe
     >
       <Form {...form}>
         <div className="space-y-4">
-          <FormSelect
+          <FormCombobox
             control={form.control}
             name="type"
             label="Follow-up Type"

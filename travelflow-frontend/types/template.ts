@@ -2,7 +2,9 @@ export type TemplateType =
   | "quotation_notes"
   | "quotation_terms"
   | "invoice_notes"
-  | "invoice_terms";
+  | "invoice_terms"
+  | "booking_notes"
+  | "booking_terms";
 
 export interface Template {
   id: string;

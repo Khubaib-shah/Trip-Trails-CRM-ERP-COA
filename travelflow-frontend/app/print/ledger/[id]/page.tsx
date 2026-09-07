@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { ApiClient as API } from "@/lib/api-client";
 import dynamic from "next/dynamic";
+import { useBranchStore } from "@/store/branch.store";
 
 const LedgerPDFViewer = dynamic(
   () => import("@/components/reports/LedgerPDFViewer"),
@@ -19,6 +20,7 @@ const LedgerPDFViewer = dynamic(
 
 export default function LedgerPrintPage() {
   const { id } = useParams();
+  const activeCurrency = useBranchStore(state => state.activeCurrency);
   const [data, setData] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -51,7 +53,7 @@ export default function LedgerPrintPage() {
 
   return (
     <div className="flex-1 w-full h-screen m-0 p-0 overflow-hidden bg-black">
-      <LedgerPDFViewer data={data} />
+      <LedgerPDFViewer data={data} currency={activeCurrency} />
     </div>
   );
 }

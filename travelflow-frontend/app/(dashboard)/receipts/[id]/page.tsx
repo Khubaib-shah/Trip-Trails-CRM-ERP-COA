@@ -1,15 +1,63 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { ArrowLeft, Printer, Send, Download } from "lucide-react";
 import { useRouter, useParams } from "next/navigation";
-import { showSuccess } from "@/lib/toast-utils";
+import { showError, showSuccess } from "@/lib/toast-utils";
 import { Button } from "@/components/ui/button";
 import { CurrencyDisplay } from "@/components/shared/CurrencyDisplay";
+import { PageSkeleton } from "@/components/shared/PageSkeleton";
+import { API } from "@/lib/data-source";
+import { CustomerPayment } from "@/types";
 
 export default function ReceiptDetailPage() {
   const router = useRouter();
   const params = useParams<{ id: string }>();
   const id = params?.id;
+  const [payment, setPayment] = useState<CustomerPayment | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    if (!id) return;
+    let cancelled = false;
+
+    async function load() {
+      setIsLoading(true);
+      try {
+        const data = await API.getPayment(id!);
+        if (!cancelled) setPayment(data);
+      } catch (err) {
+        showError(err);
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    }
+    load();
+    return () => { cancelled = true; };
+  }, [id]);
+
+  if (isLoading) {
+    return <PageSkeleton />;
+  }
+
+  if (!payment) {
+    return (
+      <div className="flex flex-col items-center justify-center py-24 space-y-4">
+        <p className="text-tf-text-secondary">Payment not found.</p>
+        <Button variant="outline" onClick={() => router.back()}>
+          <ArrowLeft className="w-4 h-4 mr-2" /> Go Back
+        </Button>
+      </div>
+    );
+  }
+
+  const customerName = payment.customer
+    ? `${payment.customer.firstName} ${payment.customer.lastName}`
+    : "N/A";
+
+  const bookingRefs = payment.allocations?.length
+    ? payment.allocations.map((a) => a.bookingId).join(", ")
+    : payment.bookingId ?? "N/A";
 
   return (
     <div className="space-y-6 pb-12">
@@ -25,9 +73,9 @@ export default function ReceiptDetailPage() {
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div>
-            <h1 className="tf-h2 text-tf-text-primary">Receipt {id}</h1>
+            <h1 className="tf-h2 text-tf-text-primary">Payment {payment.paymentRef}</h1>
             <p className="tf-body text-tf-text-secondary mt-1">
-              Generated on {new Date().toLocaleDateString()}
+              Generated on {payment.date ? new Date(payment.date).toLocaleDateString() : "N/A"}
             </p>
           </div>
         </div>
@@ -58,7 +106,7 @@ export default function ReceiptDetailPage() {
         </div>
       </div>
 
-      {/* Receipt Document Simulation */}
+      {/* Receipt Document */}
       <div className="bg-white text-black p-8 md:p-12 rounded-xl shadow-sm border border-tf-border max-w-3xl mx-auto">
         <div className="flex justify-between items-center border-b border-gray-200 pb-8 mb-8">
           <div className="flex items-center gap-2">
@@ -71,9 +119,9 @@ export default function ReceiptDetailPage() {
           </div>
           <div className="text-right">
             <h2 className="text-3xl font-light text-gray-900 mb-2">
-              OFFICIAL RECEIPT
+              OFFICIAL PAYMENT
             </h2>
-            <p className="text-gray-500 font-medium">{id}</p>
+            <p className="text-gray-500 font-medium">{payment.paymentRef}</p>
           </div>
         </div>
 
@@ -85,41 +133,62 @@ export default function ReceiptDetailPage() {
             <div>
               <p className="text-gray-500 mb-1">Date Received:</p>
               <p className="font-semibold text-gray-900">
-                {new Date().toLocaleDateString()}
+                {payment.date ? new Date(payment.date).toLocaleDateString() : "N/A"}
               </p>
             </div>
             <div>
               <p className="text-gray-500 mb-1">Payment Method:</p>
-              <p className="font-semibold text-gray-900">Bank Transfer</p>
+              <p className="font-semibold text-gray-900">{payment.paymentMethod}</p>
             </div>
             <div>
               <p className="text-gray-500 mb-1">Received From:</p>
-              <p className="font-semibold text-gray-900">Usman Ali</p>
+              <p className="font-semibold text-gray-900">{customerName}</p>
             </div>
             <div>
               <p className="text-gray-500 mb-1">Applied To:</p>
-              <p className="font-semibold text-gray-900">INV-2024-001</p>
+              <p className="font-semibold text-gray-900">{bookingRefs}</p>
             </div>
           </div>
         </div>
 
-        <div className="flex items-center justify-center py-12 border-y border-gray-100 my-8">
-          <div className="text-center">
-            <p className="text-gray-500 mb-2 uppercase tracking-widest text-sm font-bold">
-              Amount Received
-            </p>
-            <CurrencyDisplay
-              amount={45000}
-              className="text-5xl font-light text-gray-900"
-            />
+        <div className="py-8 border-y border-gray-100 my-8">
+          <div className="flex flex-col md:flex-row items-center justify-between gap-8">
+            <div className="text-center flex-1">
+              <p className="text-gray-500 mb-2 uppercase tracking-widest text-xs font-bold">
+                Total Booking Cost
+              </p>
+              <CurrencyDisplay
+                amount={(payment as any).bookingTotal ?? 0}
+                className="text-nowrap text-2xl font-light text-gray-900"
+              />
+            </div>
+
+            <div className="text-center flex-1 border-l border-r border-gray-100 px-4">
+              <p className="text-nowrap text-green-600 mb-2 uppercase tracking-widest text-sm font-bold">
+                Amount Received
+              </p>
+              <CurrencyDisplay
+                amount={payment.amount}
+                className="text-nowrap text-4xl font-light text-gray-900"
+              />
+            </div>
+
+            <div className="text-center flex-1">
+              <p className="text-gray-500 mb-2 uppercase tracking-widest text-xs font-bold">
+                Remaining Balance
+              </p>
+              <CurrencyDisplay
+                amount={(payment as any).balanceDue ?? 0}
+                className="text-2xl font-light text-red-500"
+              />
+            </div>
           </div>
         </div>
 
         <div className="mt-8 text-gray-500 text-sm">
           <p className="mb-4">
             <span className="font-semibold text-gray-700">Notes: </span>
-            Payment received via standard bank transfer. The amount has been
-            applied to your outstanding balance for invoice INV-2024-001.
+            {payment.notes || "No additional notes."}
           </p>
           <div className="flex justify-between items-end mt-16 pt-8 border-t border-gray-200">
             <div>

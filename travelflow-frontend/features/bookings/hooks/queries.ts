@@ -82,3 +82,32 @@ export function useDeleteBooking() {
     },
   });
 }
+
+// --- Payment Schedules ---
+
+export function usePaymentSchedules(bookingId?: string) {
+  return useQuery({
+    queryKey: queryKeys.paymentSchedules.list(bookingId),
+    queryFn: () => API.getPaymentSchedules(bookingId),
+    staleTime: 60_000,
+  });
+}
+
+export function usePaymentSchedule(id: string) {
+  return useQuery({
+    queryKey: queryKeys.paymentSchedules.detail(id),
+    queryFn: () => API.getPaymentSchedule(id),
+    staleTime: 60_000,
+  });
+}
+
+export function useCreatePaymentSchedule() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: any) => API.createPaymentSchedule(data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.paymentSchedules.all });
+      qc.invalidateQueries({ queryKey: queryKeys.bookings.all });
+    },
+  });
+}

@@ -19,9 +19,13 @@ export type QuotationTaxType =
 
 export const quotationItemSchema = z.object({
   id: z.string().optional(),
-  description: z.string().min(1, "Item description is required"),
+  serviceCategory: z.string().min(1, "Service category is required"),
+  supplierId: z.string().optional(),
+  title: z.string().min(1, "Title is required"),
+  description: z.string().optional(),
   quantity: z.coerce.number().int().min(1, "Quantity must be >= 1"),
-  unitPrice: z.coerce.number().min(0, "Unit price must be >= 0"),
+  costPrice: z.coerce.number().min(0, "Cost price must be >= 0"),
+  sellingPrice: z.coerce.number().min(0, "Selling price must be >= 0"),
 });
 
 export const quotationTaxSchema = z.object({
@@ -59,6 +63,8 @@ export const quotationSchema = z
     customerPhone: z.string().optional().default(""),
     customerEmail: z.string().optional().default(""),
 
+    currency: z.enum(["PKR", "AED"]).default("PKR"),
+
     items: z.array(quotationItemSchema).min(1, "Add at least one item"),
     taxes: z.array(quotationTaxSchema).optional().default([]),
 
@@ -84,13 +90,19 @@ export const quotationSchema = z
   })
 
   .refine((d) => {
-    const subtotal = d.items.reduce(
-      (acc, it) => acc + it.quantity * it.unitPrice,
-      0,
-    );
+    let subtotal = 0;
+    let totalCost = 0;
+    
+    d.items.forEach((it) => {
+      subtotal += it.quantity * it.sellingPrice;
+      totalCost += it.quantity * it.costPrice;
+    });
+
+    const profit = subtotal - totalCost;
+
     const taxAmount = (d.taxes ?? []).reduce((acc, t) => {
       if (t.taxType === "fixed") return acc + t.value;
-      return acc + subtotal * (t.value / 100);
+      return acc + profit * (t.value / 100);
     }, 0);
     const grandTotal = subtotal + taxAmount;
     return grandTotal >= 0;
@@ -118,12 +130,18 @@ export const quotationDefaultValues: QuotationFormValues = {
   customerPhone: "",
   customerEmail: "",
 
+  currency: "PKR",
+
   items: [
     {
       id: undefined,
+      serviceCategory: "other",
+      title: "",
       description: "",
       quantity: 1,
-      unitPrice: 0,
+      costPrice: 0,
+      sellingPrice: 0,
+      supplierId: undefined,
     },
   ],
   taxes: [],

@@ -1,4 +1,5 @@
 "use client";
+import { useBranchStore } from "@/store/branch.store";
 
 import { DonutChart } from "@/components/charts/DonutChart";
 import { DashboardStats } from "@/types";
@@ -11,14 +12,28 @@ export function ProfitChart({
   data: DashboardStats | null;
   isLoading: boolean;
 }) {
-  const chartData = [
-    { name: "Flight Tickets", value: 380000, color: "var(--tf-primary)" },
-    { name: "Umrah Packages", value: 150000, color: "var(--tf-success)" },
-    { name: "Visas", value: 90000, color: "var(--tf-warning)" },
-    { name: "Hotels", value: 60000, color: "var(--tf-info)" },
+  const activeCurrency = useBranchStore((state) => state.activeCurrency);
+
+  const colors = [
+    "var(--tf-primary)",
+    "var(--tf-success)",
+    "var(--tf-warning)",
+    "var(--tf-info)",
+    "var(--tf-danger)",
+    "var(--tf-accent)",
   ];
 
-  const total = data?.monthlyProfit || 680000;
+  const chartData = (data?.profitByCategory || []).map((item, index) => ({
+    name: item.name.charAt(0).toUpperCase() + item.name.slice(1),
+    value: item.value,
+    color: colors[index % colors.length],
+  }));
+
+  if (chartData.length === 0) {
+    chartData.push({ name: "No Data", value: 1, color: "var(--tf-surface-2)" });
+  }
+
+  const total = data?.profitByCategory?.reduce((sum, item) => sum + item.value, 0) || 0;
 
   return (
     <div className="bg-tf-surface border border-tf-border rounded-xl p-6 h-full shadow-sm flex flex-col">
@@ -33,7 +48,7 @@ export function ProfitChart({
             data={chartData}
             height={240}
             centerLabel="Total Profit"
-            centerValue={`₨ ${formatShort(total)}`}
+            centerValue={`${activeCurrency} ${formatShort(total)}`}
           />
 
           <div className="grid grid-cols-2 gap-4 w-full mt-6">
@@ -48,7 +63,7 @@ export function ProfitChart({
                     {item.name}
                   </p>
                   <p className="text-sm font-semibold text-tf-text-primary">
-                    ₨ {formatShort(item.value)}
+                    {activeCurrency} {formatShort(item.value)}
                   </p>
                 </div>
               </div>

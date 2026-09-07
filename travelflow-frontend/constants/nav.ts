@@ -12,6 +12,9 @@ import {
   UserCog,
   ShieldCheck,
   Settings,
+  FileMinus,
+  BookOpen,
+  ScrollText,
   LucideIcon,
 } from "lucide-react";
 
@@ -21,6 +24,7 @@ export interface NavItem {
   icon: LucideIcon;
   badge?: string;
   roles?: string[];
+  exact?: boolean;
 }
 
 export interface NavGroup {
@@ -75,7 +79,12 @@ export const sidebarNav: NavGroup[] = [
         icon: FileText,
       },
       {
-        title: "Receipts",
+        title: "Credit Notes",
+        href: "/credit-notes",
+        icon: FileMinus,
+      },
+      {
+        title: "Payments",
         href: "/receipts",
         icon: Receipt,
       },
@@ -93,6 +102,36 @@ export const sidebarNav: NavGroup[] = [
         title: "Expenses",
         href: "/expenses",
         icon: CreditCard,
+        roles: ["admin", "manager"],
+      },
+    ],
+  },
+  {
+    label: "ACCOUNTING",
+    items: [
+      {
+        title: "A/R Ledger",
+        href: "/accounting/ar",
+        icon: Users,
+        roles: ["admin", "manager"],
+      },
+      {
+        title: "A/P Ledger",
+        href: "/accounting/ap",
+        icon: Building2,
+        roles: ["admin", "manager"],
+      },
+      {
+        title: "Chart of Accounts",
+        href: "/accounting",
+        icon: BookOpen,
+        roles: ["admin", "manager"],
+        exact: true,
+      },
+      {
+        title: "Journal Entries",
+        href: "/accounting/journal-entries",
+        icon: ScrollText,
         roles: ["admin", "manager"],
       },
     ],

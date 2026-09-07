@@ -3,9 +3,9 @@ import { persist, createJSONStorage } from "zustand/middleware";
 
 interface BranchState {
   activeBranchId: string | "all";
-  activeCurrency: string;
+  activeCurrency: "PKR" | "AED";
   setActiveBranchId: (id: string | "all") => void;
-  setActiveBranch: (id: string | "all", currency?: string) => void;
+  setActiveBranch: (id: string | "all", currency?: "PKR" | "AED") => void;
 }
 
 export const useBranchStore = create<BranchState>()(

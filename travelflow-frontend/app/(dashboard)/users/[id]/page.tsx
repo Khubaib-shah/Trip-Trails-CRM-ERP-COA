@@ -14,7 +14,7 @@ import {
 import { useParams, useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@/lib/zod-resolver";
-import { showSuccess } from "@/lib/toast-utils";
+import { showSuccess, showError } from "@/lib/toast-utils";
 
 import { User, Branch, Role, Lead, Booking } from "@/types";
 import { API } from "@/lib/data-source";
@@ -23,7 +23,7 @@ import { PageSkeleton } from "@/components/shared/PageSkeleton";
 import { parseApiError } from "@/lib/error-parser";
 import { Button } from "@/components/ui/button";
 import { DrawerForm } from "@/components/forms/DrawerForm";
-import { FormField, FormSelect } from "@/components/forms/FormField";
+import { FormField, FormPhoneField, FormSelect, FormCombobox } from "@/components/forms/FormField";
 import { Form } from "@/components/ui/form";
 import {
   userSchema,
@@ -87,10 +87,29 @@ export default function UserDetailPage() {
   }, [id]);
 
   const onSubmit = async (values: UserFormValues) => {
-    await API.updateUser(id, values);
-    showSuccess("User updated successfully");
-    setEditOpen(false);
-    await loadAll();
+    try {
+      await API.updateUser(id, values);
+      showSuccess("User updated successfully");
+      setEditOpen(false);
+      await loadAll();
+    } catch (error: unknown) {
+      showError(error, { context: "Updating user" });
+    }
+  };
+
+  const [isResetting, setIsResetting] = useState(false);
+
+  const handleResetPassword = async () => {
+    if (!confirm("Are you sure you want to reset this user's password? The new password will be 'Password123!'.")) return;
+    setIsResetting(true);
+    try {
+      await API.resetUserPassword(id!);
+      showSuccess("Password reset successfully to Password123!");
+    } catch (error) {
+      showError(error, { context: "Resetting password" });
+    } finally {
+      setIsResetting(false);
+    }
   };
 
   if (isLoading) {
@@ -149,15 +168,24 @@ export default function UserDetailPage() {
             </div>
           </div>
         </div>
-        <Button
-          onClick={() => {
-            form.reset(mapUserToForm(user));
-            setEditOpen(true);
-          }}
-          className="bg-tf-primary text-white hover:bg-tf-primary-hover"
-        >
-          <Edit className="w-4 h-4 mr-2" /> Edit User
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            onClick={handleResetPassword}
+            disabled={isResetting}
+          >
+            Reset Password
+          </Button>
+          <Button
+            onClick={() => {
+              form.reset(mapUserToForm(user));
+              setEditOpen(true);
+            }}
+            className="bg-tf-primary text-white hover:bg-tf-primary-hover"
+          >
+            <Edit className="w-4 h-4 mr-2" /> Edit User
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -267,14 +295,13 @@ export default function UserDetailPage() {
               type="email"
               required
             />
-            <FormField
+            <FormPhoneField
               control={form.control}
               name="phone"
               label="Phone"
-              type="tel"
             />
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <FormSelect
+              <FormCombobox
                 control={form.control}
                 name="role"
                 label="Role"
@@ -284,7 +311,7 @@ export default function UserDetailPage() {
                   value: r.name,
                 }))}
               />
-              <FormSelect
+              <FormCombobox
                 control={form.control}
                 name="branchId"
                 label="Branch"

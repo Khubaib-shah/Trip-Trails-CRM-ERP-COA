@@ -81,7 +81,8 @@ export async function getMe(userId: string) {
 
   if (!user) throw ApiError.notFound("User");
 
-  const userObj: Record<string, unknown> = { ...user };
+  const { password: _, ...safeUser } = user;
+  const userObj: Record<string, unknown> = { ...safeUser };
 
   if (user.agencyId) {
     const agency = await prisma.agency.findUnique({ where: { id: user.agencyId } });

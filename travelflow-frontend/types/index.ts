@@ -9,3 +9,4 @@ export * from "./invoice";
 export * from "./dashboard";
 export * from "./role";
 export * from "./quotation";
+export * from "./template";

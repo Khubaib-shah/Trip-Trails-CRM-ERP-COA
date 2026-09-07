@@ -13,7 +13,7 @@ import {
   CreditCard,
 } from "lucide-react";
 import { useParams, useRouter } from "next/navigation";
-import { showSuccess } from "@/lib/toast-utils";
+import { showSuccess, showError } from "@/lib/toast-utils";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -31,7 +31,7 @@ import { DataTableRowActions } from "@/components/tables/DataTableRowActions";
 import { CustomerNotesPanel } from "@/components/customers/CustomerNotesPanel";
 import { CustomerDocumentsPanel } from "@/components/customers/CustomerDocumentsPanel";
 import { DrawerForm } from "@/components/forms/DrawerForm";
-import { FormField, FormSelect } from "@/components/forms/FormField";
+import { FormField, FormPhoneField, FormSelect, FormCombobox } from "@/components/forms/FormField";
 import { Form } from "@/components/ui/form";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@/lib/zod-resolver";
@@ -56,6 +56,7 @@ export default function CustomerDetailPage() {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [notes, setNotes] = useState<CustomerNote[]>([]);
   const [documents, setDocuments] = useState<CustomerDocument[]>([]);
+  const [ledger, setLedger] = useState<{entries: any[], finalBalance: number} | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [editOpen, setEditOpen] = useState(false);
   const [isPaymentDrawerOpen, setIsPaymentDrawerOpen] = useState(false);
@@ -75,6 +76,7 @@ export default function CustomerDetailPage() {
       setBookings(allBookings.filter((b) => b.customerId === id));
       setNotes(await API.getCustomerNotes(id));
       setDocuments(await API.getCustomerDocuments(id));
+      setLedger(await API.getCustomerLedger(id));
       form.reset({
         type: data.type,
         firstName: data.firstName,
@@ -119,22 +121,15 @@ export default function CustomerDetailPage() {
       ),
     },
     {
-      accessorKey: "pnr",
-      header: "PNR",
-      cell: ({ row }) => (
-        <div className="font-mono text-xs">{row.original.pnr}</div>
-      ),
-    },
-    {
-      accessorKey: "airline",
-      header: "Route",
+      accessorKey: "title",
+      header: "Title",
       cell: ({ row }) => (
         <div className="flex flex-col">
           <span className="font-medium text-tf-text-primary">
-            {row.original.airline}
+            {row.original.title || "Untitled"}
           </span>
           <span className="text-xs text-tf-text-muted">
-            {row.original.departureCity} → {row.original.arrivalCity}
+            {row.original.services?.length || 0} services
           </span>
         </div>
       ),
@@ -149,11 +144,11 @@ export default function CustomerDetailPage() {
       ),
     },
     {
-      accessorKey: "salePrice",
+      accessorKey: "totalSell",
       header: "Amount",
       cell: ({ row }) => (
         <div className="font-semibold text-sm">
-          {formatCurrency(row.original.salePrice, activeCurrency)}
+          {formatCurrency(row.original.totalSell || 0, activeCurrency)}
         </div>
       ),
     },
@@ -335,6 +330,12 @@ export default function CustomerDetailPage() {
             Booking History
           </TabsTrigger>
           <TabsTrigger
+            value="ledger"
+            className="rounded-md data-[state=active]:bg-tf-primary data-[state=active]:text-white"
+          >
+            Customer Ledger
+          </TabsTrigger>
+          <TabsTrigger
             value="documents"
             className="rounded-md data-[state=active]:bg-tf-primary data-[state=active]:text-white"
           >
@@ -385,6 +386,72 @@ export default function CustomerDetailPage() {
           </Card>
         </TabsContent>
 
+        <TabsContent value="ledger" className="mt-4">
+          <Card className="border-tf-border bg-tf-surface shadow-sm">
+            <CardHeader>
+              <CardTitle className="text-lg">Customer Ledger</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {!ledger || ledger.entries.length === 0 ? (
+                <div className="text-center py-12 border border-tf-border rounded-lg">
+                  <p className="text-tf-text-secondary">No ledger entries found.</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-tf-border">
+                        <th className="text-left py-3 px-4 font-medium text-tf-text-muted">Date</th>
+                        <th className="text-left py-3 px-4 font-medium text-tf-text-muted">Type</th>
+                        <th className="text-left py-3 px-4 font-medium text-tf-text-muted">Reference</th>
+                        <th className="text-left py-3 px-4 font-medium text-tf-text-muted">Description</th>
+                        <th className="text-right py-3 px-4 font-medium text-tf-text-muted">Debit</th>
+                        <th className="text-right py-3 px-4 font-medium text-tf-text-muted">Credit</th>
+                        <th className="text-right py-3 px-4 font-medium text-tf-text-muted">Balance</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {ledger.entries.map((entry, i) => (
+                        <tr key={i} className="border-b border-tf-border last:border-0 hover:bg-tf-background/50">
+                          <td className="py-3 px-4 text-tf-text-primary">
+                            {new Date(entry.date).toLocaleDateString("en-GB")}
+                          </td>
+                          <td className="py-3 px-4">
+                            <span className="inline-flex items-center rounded-md bg-tf-background px-2 py-1 text-xs font-medium capitalize">
+                              {entry.type.replace("_", " ")}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 font-mono text-tf-text-primary">{entry.reference}</td>
+                          <td className="py-3 px-4 text-tf-text-secondary">{entry.description}</td>
+                          <td className="py-3 px-4 text-right font-medium text-tf-danger">
+                            {entry.debit > 0 ? formatCurrency(entry.debit, activeCurrency) : "—"}
+                          </td>
+                          <td className="py-3 px-4 text-right font-medium text-tf-success">
+                            {entry.credit > 0 ? formatCurrency(entry.credit, activeCurrency) : "—"}
+                          </td>
+                          <td className="py-3 px-4 text-right font-semibold text-tf-text-primary">
+                            {formatCurrency(entry.balance, activeCurrency)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr className="border-t-2 border-tf-border bg-tf-background/50">
+                        <td colSpan={6} className="py-3 px-4 font-semibold text-tf-text-primary text-right">
+                          Final Balance
+                        </td>
+                        <td className="py-3 px-4 text-right font-bold text-tf-primary text-base">
+                          {formatCurrency(ledger.finalBalance, activeCurrency)}
+                        </td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
         <TabsContent value="documents" className="mt-4">
           <Card className="border-tf-border bg-tf-surface shadow-sm">
             <CardHeader>
@@ -420,10 +487,14 @@ export default function CustomerDetailPage() {
         onClose={() => setEditOpen(false)}
         onSubmit={form.handleSubmit(async (values) => {
           if (!customer) return;
-          await API.updateCustomer(customer.id, values);
-          showSuccess("Customer updated successfully");
-          setEditOpen(false);
-          loadAll();
+          try {
+            await API.updateCustomer(customer.id, values);
+            showSuccess("Customer updated successfully");
+            setEditOpen(false);
+            loadAll();
+          } catch (error: unknown) {
+            showError(error, { context: "Updating customer" });
+          }
         })}
         isSubmitting={form.formState.isSubmitting}
         size="md"
@@ -447,19 +518,17 @@ export default function CustomerDetailPage() {
                 label="Email"
                 type="email"
               />
-              <FormField
+              <FormPhoneField
                 control={form.control}
                 name="phone"
                 label="Phone"
-                type="tel"
               />
-              <FormField
+              <FormPhoneField
                 control={form.control}
                 name="whatsapp"
                 label="WhatsApp"
-                type="tel"
               />
-              <FormSelect
+              <FormCombobox
                 control={form.control}
                 name="city"
                 label="City"
@@ -475,6 +544,18 @@ export default function CustomerDetailPage() {
                 control={form.control}
                 name="passportNumber"
                 label="Passport"
+              />
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="emergencyContactName"
+                label="Emergency Contact Name"
+              />
+              <FormPhoneField
+                control={form.control}
+                name="emergencyContactPhone"
+                label="Emergency Contact Phone"
               />
             </div>
             <div className="flex items-center gap-3">

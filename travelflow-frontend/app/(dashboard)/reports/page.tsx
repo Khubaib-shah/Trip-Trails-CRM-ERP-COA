@@ -11,7 +11,7 @@ import {
 import { AreaChart } from "@/components/charts/AreaChart";
 import { BarChart } from "@/components/charts/BarChart";
 import { DonutChart } from "@/components/charts/DonutChart";
-import { FormSelect } from "@/components/forms/FormField";
+import { FormSelect, FormCombobox } from "@/components/forms/FormField";
 import { useForm, useWatch } from "react-hook-form";
 import { Form } from "@/components/ui/form";
 import { formatCurrency } from "@/lib/utils";
@@ -116,8 +116,8 @@ export default function ReportsPage() {
         <Form {...form}>
           <div className="flex items-center gap-3 w-full sm:w-auto">
             {isAdmin && (
-              <div className="w-40">
-                <FormSelect
+              <div className="w-52">
+                <FormCombobox
                   label="Branches"
                   control={form.control}
                   name="branchId"

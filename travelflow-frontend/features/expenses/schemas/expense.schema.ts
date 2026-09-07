@@ -10,7 +10,15 @@ export const expenseSchema = z.object({
   date: z.date({ error: "Date is required" }),
   paidTo: z.string().optional(),
   paymentMethod: z.enum(["cash", "bank_transfer", "credit_card", "cheque"]),
+  accountId: z.string().optional(),
+  paymentAccountId: z.string().optional(),
   notes: z.string().optional(),
+  isPrepaid: z.boolean().default(false).optional(),
+  amortizeOverMonths: z.preprocess(
+    (val) => (val === "" || val === undefined || val === null ? undefined : Number(val)),
+    z.number().min(1).optional()
+  ),
+  startDate: z.date().optional(),
 });
 
 export type ExpenseFormValues = z.infer<typeof expenseSchema>;

@@ -37,32 +37,32 @@ export function DataTableToolbar<TData>({
         return;
       }
 
-      const headers = table
+      const visibleColumns = table
         .getAllColumns()
-        .filter((c) => c.getIsVisible() && c.id !== "actions")
-        .map((c) => c.id);
+        .filter((c) => c.getIsVisible() && c.id !== "actions");
 
-      const csvData = rows.map((row) => {
-        return headers
-          .map((header) => {
-            const val = row.getValue(header);
-            return typeof val === "string"
-              ? `"${val.replace(/"/g, '""')}"`
-              : val;
-          })
-          .join(",");
+      const headers = visibleColumns.map((c) => c.id);
+
+      const dataRows = rows.map((row) =>
+        headers.map((header) => {
+          const val = row.getValue(header);
+          if (val === null || val === undefined) return "";
+          if (val instanceof Date) return val.toLocaleDateString("en-GB");
+          if (typeof val === "object") return JSON.stringify(val);
+          return val;
+        }),
+      );
+
+      // Use xlsx-based export
+      import("@/lib/export-utils").then(({ exportTableToExcel }) => {
+        exportTableToExcel(
+          headers,
+          dataRows as (string | number)[][],
+          "Export",
+          `export_${new Date().toISOString().slice(0, 10)}.xlsx`,
+        );
+        showSuccess("Export successful");
       });
-
-      const csvString = [headers.join(","), ...csvData].join("\n");
-      const blob = new Blob([csvString], { type: "text/csv;charset=utf-8;" });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.setAttribute("download", `export_${new Date().getTime()}.csv`);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      showSuccess("Export successful");
     } catch (e) {
       showError("Failed to export data");
     }

@@ -56,11 +56,11 @@ export function RecentBookingsTable({
       ),
     },
     {
-      accessorKey: "pnr",
-      header: "PNR",
+      accessorKey: "title",
+      header: "Title",
       cell: ({ row }) => (
-        <div className="font-mono text-xs text-tf-text-secondary">
-          {row.original.pnr}
+        <div className="text-xs text-tf-text-primary">
+          {row.original.title || "Untitled"}
         </div>
       ),
     },
@@ -79,27 +79,27 @@ export function RecentBookingsTable({
       ),
     },
     {
-      accessorKey: "airline",
-      header: "Airline",
+      accessorKey: "title",
+      header: "Title",
       cell: ({ row }) => (
         <div className="flex flex-col">
           <span className="font-medium text-tf-text-primary">
-            {row.original.airline}
+            {row.original.title || "Untitled"}
           </span>
           <span className="text-xs text-tf-text-muted">
-            {row.original.departureCity} → {row.original.arrivalCity}
+            {row.original.bookingRef}
           </span>
         </div>
       ),
     },
     {
-      accessorKey: "salePrice",
+      accessorKey: "totalSell",
       header: ({ column }) => (
         <DataTableColumnHeader column={column} title="Amount" />
       ),
       cell: ({ row }) => (
         <div className="font-semibold text-tf-text-primary font-mono tabular-nums text-sm">
-          {formatCurrency(row.original.salePrice, activeCurrency)}
+          {formatCurrency(row.original.totalSell || 0, activeCurrency)}
         </div>
       ),
     },

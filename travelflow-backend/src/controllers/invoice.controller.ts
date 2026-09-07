@@ -1,9 +1,9 @@
 import { Request, Response } from "express";
 import { ApiResponse } from "../utils/ApiResponse";
 import * as invoiceService from "../services/invoice.service";
-import { TenantContext, PaginationOptions } from "../services/domain.service";
+import { AgencyContext, PaginationOptions } from "../services/domain.service";
 
-function buildContext(req: Request): TenantContext {
+function buildContext(req: Request): AgencyContext {
   return {
     agencyId: req.agencyId!,
     branchId: req.query.branchId as string | undefined,
@@ -38,7 +38,24 @@ export async function generateInvoiceFromBooking(req: Request, res: Response) {
   ApiResponse.success(res, invoice);
 }
 
+export async function updateInvoiceStatus(req: Request, res: Response) {
+  const invoice = await invoiceService.updateInvoiceStatus(buildContext(req), req.params.id, req.body.status);
+  ApiResponse.success(res, invoice);
+}
+
 export async function markInvoicePaid(req: Request, res: Response) {
   const invoice = await invoiceService.markInvoicePaid(buildContext(req), req.params.id);
   ApiResponse.success(res, invoice);
+}
+
+export async function updateInvoice(req: Request, res: Response) {
+  const ctx = buildContext(req);
+  const invoice = await invoiceService.updateInvoice(ctx, req.params.id, req.body);
+  ApiResponse.success(res, invoice);
+}
+
+export async function deleteInvoice(req: Request, res: Response) {
+  const ctx = buildContext(req);
+  await invoiceService.deleteInvoice(ctx, req.params.id);
+  ApiResponse.success(res, { success: true });
 }

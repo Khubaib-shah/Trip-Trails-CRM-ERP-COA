@@ -32,6 +32,16 @@ const styles = StyleSheet.create({
   detailsContainer: {
     marginBottom: 20,
   },
+  section: {
+    marginTop: 20,
+    marginBottom: 10,
+  },
+  sectionTitle: {
+    fontSize: 12,
+    fontWeight: "bold",
+    color: THEME_COLOR,
+    marginBottom: 5,
+  },
   supplierName: {
     fontSize: 14,
     fontWeight: "bold",
@@ -95,51 +105,51 @@ const styles = StyleSheet.create({
   },
 });
 
-export default function SupplierStatementPDFViewer({ data }: { data: any }) {
+export default function SupplierStatementPDFViewer({ data, currency = "PKR" }: { data: any, currency?: string }) {
   const [isClient, setIsClient] = useState(false);
   useEffect(() => {
     setIsClient(true);
   }, []);
 
-  if (!isClient) return null;
+  if (!isClient || !data) return null;
 
   return (
-    <PDFViewer style={{ width: "100%", height: "100%", border: "none" }}>
-      <Document title={`Statement-${data.supplier?.name}`}>
+    <PDFViewer style={{ width: "100%", height: "100vh", border: "none" }}>
+      <Document title={`Supplier_${data.supplier.supplierRef}`}>
         <Page size="A4" style={styles.page}>
           <View style={styles.header}>
             <View>
-              <Text style={styles.title}>SUPPLIER STATEMENT</Text>
-              <Text style={styles.infoText}>Generated: {new Date().toLocaleDateString()}</Text>
+              <Text style={styles.title}>Supplier Statement</Text>
+              <Text style={styles.infoText}>Ref: {data.supplier.supplierRef}</Text>
+              <Text style={styles.infoText}>
+                Generated: {new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date())}
+              </Text>
             </View>
             <View style={{ alignItems: "flex-end" }}>
               <Text style={[styles.title, { fontSize: 16 }]}>Your Agency</Text>
             </View>
           </View>
 
-          <View style={styles.detailsContainer}>
-            <Text style={styles.supplierName}>{data.supplier?.name || "Supplier"}</Text>
-            <Text style={styles.infoText}>{data.supplier?.email} | {data.supplier?.phone}</Text>
-            <Text style={styles.infoText}>Contact: {data.supplier?.contactPerson}</Text>
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Supplier Information</Text>
+            <Text style={styles.infoText}>Name: {data.supplier.name}</Text>
+            <Text style={styles.infoText}>Phone: {data.supplier.phone}</Text>
+            {data.supplier.email && <Text style={styles.infoText}>Email: {data.supplier.email}</Text>}
           </View>
 
           <View style={styles.table}>
             <View style={styles.tableHeader}>
               <View style={styles.colDate}><Text style={styles.headerText}>Date</Text></View>
-              <View style={styles.colRef}><Text style={styles.headerText}>Reference</Text></View>
               <View style={styles.colDesc}><Text style={styles.headerText}>Description</Text></View>
-              <View style={styles.colAmount}><Text style={styles.headerText}>Debit</Text></View>
-              <View style={styles.colAmount}><Text style={styles.headerText}>Credit</Text></View>
-              <View style={styles.colAmount}><Text style={styles.headerText}>Balance</Text></View>
+              <View style={styles.colAmount}><Text style={[styles.headerText, { textAlign: "right" }]}>Debit ({currency})</Text></View>
+              <View style={styles.colAmount}><Text style={[styles.headerText, { textAlign: "right" }]}>Credit ({currency})</Text></View>
+              <View style={styles.colAmount}><Text style={[styles.headerText, { textAlign: "right" }]}>Balance ({currency})</Text></View>
             </View>
 
             {data.entries?.map((entry: any, i: number) => (
               <View key={i} style={styles.tableRow}>
                 <View style={styles.colDate}>
-                  <Text style={styles.cellText}>{new Date(entry.date).toLocaleDateString()}</Text>
-                </View>
-                <View style={styles.colRef}>
-                  <Text style={styles.cellText}>{entry.reference}</Text>
+                  <Text style={styles.cellText}>{new Intl.DateTimeFormat('en-GB', { dateStyle: 'short' }).format(new Date(entry.date))}</Text>
                 </View>
                 <View style={styles.colDesc}>
                   <Text style={styles.cellText}>{entry.description}</Text>
@@ -167,7 +177,7 @@ export default function SupplierStatementPDFViewer({ data }: { data: any }) {
             <View style={styles.summaryBox}>
               <View style={styles.summaryRow}>
                 <Text style={styles.summaryLabel}>Outstanding Payable:</Text>
-                <Text style={styles.summaryValue}>{data.finalBalance.toLocaleString()} PKR</Text>
+                <Text style={styles.summaryValue}>{data.finalBalance.toLocaleString()} {currency}</Text>
               </View>
             </View>
           </View>

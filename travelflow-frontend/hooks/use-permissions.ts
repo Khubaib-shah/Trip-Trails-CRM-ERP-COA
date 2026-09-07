@@ -5,14 +5,25 @@ export function usePermissions() {
 
   const hasPermission = (permission: string) => {
     if (!user) return false;
-    if (user.role === "admin") return true;
-    if (user.permissions?.includes("admin")) return true;
+    // Admins, owners, and managers have full operational permissions (managers scoped to their own branch)
+    if (
+      user.role === "admin" ||
+      user.role === "owner" ||
+      user.role === "manager" ||
+      user.role === "branch_manager"
+    ) {
+      return true;
+    }
+    if (user.permissions?.includes("admin") || user.permissions?.includes("all")) {
+      return true;
+    }
     return user.permissions?.includes(permission) ?? false;
   };
 
   return {
     hasPermission,
     permissions: user?.permissions || [],
-    isAdmin: user?.role === "admin" || user?.permissions?.includes("admin"),
+    isAdmin: user?.role === "admin" || user?.role === "owner" || user?.permissions?.includes("admin"),
+    isManager: user?.role === "manager" || user?.role === "branch_manager",
   };
 }

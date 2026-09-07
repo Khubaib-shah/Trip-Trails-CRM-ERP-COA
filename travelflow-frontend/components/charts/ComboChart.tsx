@@ -1,4 +1,5 @@
 "use client";
+import { useBranchStore } from "@/store/branch.store";
 
 import { ComposedChart, Bar, Line, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { formatShort } from "@/lib/utils";
@@ -12,6 +13,8 @@ interface ComboChartProps {
 }
 
 export function ComboChart({ data, xKey = "name", barSeries, lineSeries, height = 300 }: ComboChartProps) {
+  const activeCurrency = useBranchStore((state) => state.activeCurrency);
+
   return (
     <div style={{ width: '100%', height: height }}>
       <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1}>
@@ -46,7 +49,7 @@ export function ComboChart({ data, xKey = "name", barSeries, lineSeries, height 
             labelStyle={{ color: "var(--tf-text-secondary)", marginBottom: 4 }}
             formatter={(value, name) => {
               const num = typeof value === 'number' ? value : 0;
-              return [`₨ ${num.toLocaleString()}`, String(name)];
+              return [`${activeCurrency} ${num.toLocaleString()}`, String(name)];
             }}
           />
           

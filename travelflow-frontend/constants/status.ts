@@ -19,6 +19,10 @@ export const STATUS_STYLES = {
   unpaid:       { bg: 'var(--tf-danger-soft)',  text: 'var(--tf-danger)',  label: 'Unpaid' },
   partial:      { bg: 'var(--tf-warning-soft)', text: 'var(--tf-warning)', label: 'Partial' },
   paid:         { bg: 'var(--tf-success-soft)', text: 'var(--tf-success)', label: 'Paid' },
+
+  // General statuses
+  active:       { bg: 'var(--tf-success-soft)', text: 'var(--tf-success)', label: 'Active' },
+  inactive:     { bg: 'var(--tf-surface-2)',    text: 'var(--tf-text-secondary)', label: 'Inactive' },
 } as const;
 
 export type StatusType = keyof typeof STATUS_STYLES;

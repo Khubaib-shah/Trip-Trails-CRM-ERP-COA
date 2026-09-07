@@ -3,6 +3,7 @@ import { persist, createJSONStorage } from "zustand/middleware";
 import type { User } from "@/types";
 import { parseApiError } from "@/lib/error-parser";
 import { showError } from "@/lib/toast-utils";
+import { useBranchStore } from "./branch.store";
 
 interface AuthState {
   user: User | null;
@@ -45,7 +46,13 @@ export const useAuthStore = create<AuthState>()(
       isLoading: true, // Start loading as true to prevent premature redirects
       serverError: null,
 
-      setUser: (user) => set({ user, isAuthenticated: true, serverError: null }),
+      setUser: (user) => {
+        set({ user, isAuthenticated: true, serverError: null });
+        const currentBranch = useBranchStore.getState().activeBranchId;
+        if (user.branchId && (!currentBranch || currentBranch === "all")) {
+          useBranchStore.getState().setActiveBranch(user.branchId, user.branch?.currency);
+        }
+      },
       clearUser: () => set({ user: null, isAuthenticated: false, serverError: null }),
       setLoading: (loading) => set({ isLoading: loading }),
       setServerError: (error) => set({ serverError: error }),
@@ -55,6 +62,9 @@ export const useAuthStore = create<AuthState>()(
         try {
           const user = await _loginFn(email, password);
           set({ user, isAuthenticated: true, serverError: null });
+          if (user.branchId) {
+            useBranchStore.getState().setActiveBranch(user.branchId, user.branch?.currency);
+          }
         } finally {
           set({ isLoading: false });
         }
@@ -76,6 +86,10 @@ export const useAuthStore = create<AuthState>()(
         try {
           const user = await _getMeFn();
           set({ user, isAuthenticated: true, serverError: null });
+          const currentBranch = useBranchStore.getState().activeBranchId;
+          if (user.branchId && (!currentBranch || currentBranch === "all")) {
+            useBranchStore.getState().setActiveBranch(user.branchId, user.branch?.currency);
+          }
         } catch (err: any) {
           const parsed = parseApiError(err);
 

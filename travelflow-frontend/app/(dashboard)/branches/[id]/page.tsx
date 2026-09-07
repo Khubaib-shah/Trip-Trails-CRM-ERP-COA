@@ -22,7 +22,7 @@ import { CurrencyDisplay } from "@/components/shared/CurrencyDisplay";
 import { BranchPerformance } from "@/components/dashboard/BranchPerformance";
 import { PageSkeleton } from "@/components/shared/PageSkeleton";
 import { DrawerForm } from "@/components/forms/DrawerForm";
-import { FormField, FormSelect } from "@/components/forms/FormField";
+import { FormField, FormPhoneField, FormSelect } from "@/components/forms/FormField";
 import { Form } from "@/components/ui/form";
 import { Label } from "@/components/ui/label";
 import { API } from "@/lib/data-source";
@@ -64,7 +64,7 @@ export default function BranchDetailPage() {
     setAgents(users.filter((u) => u.branchId === id));
     const branchBookings = bookings.filter((b: Booking) => b.branchId === id);
     setStats({
-      revenue: branchBookings.reduce((s, b) => s + b.salePrice, 0),
+      revenue: branchBookings.reduce((s, b) => s + (b.totalSell || 0), 0),
       bookings: branchBookings.length,
     });
     setIsLoading(false);
@@ -103,16 +103,21 @@ export default function BranchDetailPage() {
 
   const handleCreateAgent = async (values: UserFormValues) => {
     setIsSubmitting(true);
-    await API.createUser({
-      ...values,
-      branchId: id,
-      role: values.role || "agent",
-    });
-    showSuccess("Agent created and assigned to branch");
-    setAddAgentOpen(false);
-    form.reset({ ...userDefaultValues, branchId: id, role: "agent" });
-    setIsSubmitting(false);
-    await loadAll();
+    try {
+      await API.createUser({
+        ...values,
+        branchId: id,
+        role: values.role || "agent",
+      });
+      showSuccess("Agent created and assigned to branch");
+      setAddAgentOpen(false);
+      form.reset({ ...userDefaultValues, branchId: id, role: "agent" });
+      await loadAll();
+    } catch (error: unknown) {
+      showError(error, { context: "Creating agent" });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const openAddAgent = () => {
@@ -404,11 +409,10 @@ export default function BranchDetailPage() {
                   type="email"
                   required
                 />
-                <FormField
+                <FormPhoneField
                   control={form.control}
                   name="phone"
                   label="Phone"
-                  type="tel"
                 />
                 <FormSelect
                   control={form.control}

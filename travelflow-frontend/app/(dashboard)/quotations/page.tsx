@@ -1,4 +1,5 @@
 "use client";
+import { useBranchStore } from "@/store/branch.store";
 
 import { useEffect, useState } from "react";
 import { Plus, FileText, Share2 } from "lucide-react";
@@ -22,8 +23,6 @@ import { StatusBadge } from "@/components/shared/StatusBadge";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
-import { useEntityDrawer } from "@/hooks/use-entity-drawer";
-import { QuotationDrawer } from "@/components/quotations/QuotationDrawer";
 import { QuotationPreviewModal } from "@/components/quotations/QuotationPreviewModal";
 import type { QuotationFormValues } from "@/features/quotations/schemas/quotation.schema";
 import { mapQuotationToForm } from "@/features/quotations/utils/mapQuotationToForm";
@@ -31,6 +30,8 @@ import { mapQuotationToForm } from "@/features/quotations/utils/mapQuotationToFo
 import type { Quotation, Customer, Supplier, Branch, User } from "@/types";
 
 export default function QuotationsPage() {
+  const activeCurrency = useBranchStore((state) => state.activeCurrency);
+
   const router = useRouter();
   const queryClient = useQueryClient();
   const [dateRange, setDateRange] = useState<DateRange | undefined>();
@@ -46,64 +47,7 @@ export default function QuotationsPage() {
   const createMutation = useCreateQuotation();
   const updateMutation = useUpdateQuotation();
 
-  const { isDrawerOpen, editingId, isEditing, openCreate, openEdit, close } =
-    useEntityDrawer();
-
-  const [viewingQuotationId, setViewingQuotationId] = useState<string | null>(
-    null,
-  );
-  const [viewInitialValues, setViewInitialValues] = useState<
-    Partial<QuotationFormValues>
-  >({});
-  const [isViewMode, setIsViewMode] = useState(false);
-
   const [previewQuotation, setPreviewQuotation] = useState<Quotation | null>(null);
-
-  const onSubmit = async (values: QuotationFormValues) => {
-    try {
-      if (isEditing && editingId) {
-        await updateMutation.mutateAsync({ id: editingId, data: values });
-        showSuccess("Quotation updated successfully");
-      } else {
-        const quotation = await createMutation.mutateAsync(values);
-        showSuccess("Quotation created successfully", {
-          description: `Reference: ${quotation.quotationRef}`,
-        });
-      }
-      close();
-    } catch (error: unknown) {
-      showError(error, { context: isEditing ? "Updating quotation" : "Creating quotation" });
-    }
-  };
-
-
-
-  const openView = async (id: string) => {
-    try {
-      const q = await queryClient.fetchQuery({
-        queryKey: queryKeys.quotations.detail(id),
-        queryFn: () => API.getQuotation(id),
-      });
-      setViewInitialValues(mapQuotationToForm(q));
-      setViewingQuotationId(id);
-      setIsViewMode(true);
-    } catch (e: any) {
-      showError(e.message || "Failed to load quotation");
-    }
-  };
-
-  const handleOpenEdit = async (id: string) => {
-    try {
-      const q = await queryClient.fetchQuery({
-        queryKey: queryKeys.quotations.detail(id),
-        queryFn: () => API.getQuotation(id),
-      });
-      setViewInitialValues(mapQuotationToForm(q));
-      openEdit(id);
-    } catch (e: any) {
-      showError(e.message || "Failed to load quotation");
-    }
-  };
 
   const initialValues = {
     customerId: customers[0]?.id ?? "",
@@ -142,7 +86,7 @@ export default function QuotationsPage() {
       ),
       cell: ({ row }) => (
         <span className="font-semibold text-tf-success">
-          ₨ {row.original.grandTotal?.toLocaleString?.() ?? "0"}
+          {activeCurrency} {row.original.grandTotal?.toLocaleString?.() ?? "0"}
         </span>
       ),
     },
@@ -156,10 +100,8 @@ export default function QuotationsPage() {
       cell: ({ row }) => (
         <DataTableRowActions
           row={row}
-          onView={() => openView(row.original.id)}
-          onEdit={() => {
-            handleOpenEdit(row.original.id);
-          }}
+          onView={() => router.push(`/quotations/${row.original.id}`)}
+          onEdit={() => router.push(`/quotations/${row.original.id}/edit`)}
           customActions={(row) => (
             <>
               <DropdownMenuItem
@@ -197,7 +139,7 @@ export default function QuotationsPage() {
           </p>
         </div>
         <Button
-          onClick={() => openCreate()}
+          onClick={() => router.push("/quotations/create")}
           className="bg-tf-primary text-white hover:bg-tf-primary-hover shadow-sm"
         >
           <Plus className="mr-2 h-4 w-4" /> Create Quotation
@@ -222,52 +164,12 @@ export default function QuotationsPage() {
                 icon={Plus}
                 title="No quotations found"
                 description={dateRange ? "No quotations found in the selected date range." : "Create your first quotation to get started."}
-                action={{ label: "Create Quotation", onClick: () => openCreate() }}
+                action={{ label: "Create Quotation", onClick: () => router.push("/quotations/create") }}
               />
             }
           />
         </div>
 
-      <QuotationDrawer
-        title={
-          isViewMode
-            ? "Quotation"
-            : isEditing
-              ? "Edit Quotation"
-              : "Add New Quotation"
-        }
-        description={
-          isViewMode
-            ? "View quotation details."
-            : isEditing
-              ? "Update quotation items, taxes and totals."
-              : "Create a new quotation for a customer."
-        }
-        isOpen={isDrawerOpen || isViewMode}
-        onClose={() => {
-          setIsViewMode(false);
-          close();
-        }}
-        mode={isViewMode ? "view" : isEditing ? "edit" : "create"}
-        editingId={isViewMode ? viewingQuotationId! : editingId ?? undefined}
-        customers={customers}
-        branches={branches}
-        agents={agents}
-        initialValues={isViewMode || isEditing ? viewInitialValues : initialValues}
-        onSaved={async (q) => {
-          if (!isEditing && !isViewMode) {
-            setPreviewQuotation(q);
-          }
-        }}
-        onEditFromView={() => {
-          setIsViewMode(false);
-          openEdit(viewingQuotationId!);
-        }}
-        onCreateFromView={() => {
-          setIsViewMode(false);
-          openCreate();
-        }}
-      />
       <QuotationPreviewModal
         isOpen={!!previewQuotation}
         onClose={() => setPreviewQuotation(null)}

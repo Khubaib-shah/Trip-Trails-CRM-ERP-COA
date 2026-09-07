@@ -53,6 +53,16 @@ export const PERMISSION_GROUPS = [
     actions: ["Reports: View"]
   },
   {
+    module: "Accounting",
+    actions: [
+      "Accounting: Journal",
+      "Accounting: Ledger",
+      "Accounting: AR",
+      "Accounting: AP",
+      "Accounting: Chart of Accounts"
+    ]
+  },
+  {
     module: "Settings",
     actions: ["Settings: View", "Settings: Edit"]
   }

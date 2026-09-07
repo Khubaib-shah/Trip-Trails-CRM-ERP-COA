@@ -1,4 +1,5 @@
 "use client";
+import { useBranchStore } from "@/store/branch.store";
 
 import { Bar, BarChart as RechartsBarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis, LabelList } from "recharts";
 import { formatShort } from "@/lib/utils";
@@ -17,6 +18,8 @@ interface BarChartProps {
 }
 
 export function BarChart({ data, xKey = "name", series, height = 300, layout = "horizontal", showValueOnBars = false }: BarChartProps) {
+  const activeCurrency = useBranchStore((state) => state.activeCurrency);
+
   const isVertical = layout === "vertical";
   
   return (
@@ -72,7 +75,7 @@ export function BarChart({ data, xKey = "name", series, height = 300, layout = "
             labelStyle={{ color: "var(--tf-text-secondary)", marginBottom: 4 }}
             formatter={(value, name) => {
               const num = typeof value === 'number' ? value : 0;
-              return [`₨ ${num.toLocaleString()}`, String(name)];
+              return [`${activeCurrency} ${num.toLocaleString()}`, String(name)];
             }}
           />
           

@@ -117,7 +117,7 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     color: "#fff",
     textTransform: "uppercase",
-    width: 100,
+    width: 140,
     textAlign: "right",
     letterSpacing: 2,
   },
@@ -143,7 +143,7 @@ const styles = StyleSheet.create({
   tableCellRight: {
     fontSize: 9,
     color: "#333",
-    width: 100,
+    width: 140,
     textAlign: "right",
   },
 
@@ -169,7 +169,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   summarySection: {
-    width: "40%",
+    width: "45%",
     alignItems: "flex-end",
   },
   summaryRow: {
@@ -247,16 +247,16 @@ export default function ReceiptPDFViewer({ data }: { data: any }) {
   const bgUrl = `${origin}/assets/invoice/triptrails-letter-head.png`;
 
   const Doc = () => (
-    <Document title={`Receipt-${data.receiptRef}`}>
+    <Document title={`Payment-${data.paymentRef}`}>
       <Page size="A4" style={styles.page}>
         <Image src={bgUrl} style={styles.background} fixed />
         
         <View style={styles.content}>
-          {/* Receipt Number */}
+          {/* Payment Number */}
           <View>
-            <Text style={styles.receiptNumberLabel}>Receipt Number:</Text>
+            <Text style={styles.receiptNumberLabel}>Payment Number:</Text>
             <View style={styles.receiptNumberBox}>
-              <Text style={styles.receiptNumberText}>{data.receiptRef || "N/A"}</Text>
+              <Text style={styles.receiptNumberText}>{data.paymentRef || "N/A"}</Text>
             </View>
           </View>
 
@@ -265,26 +265,26 @@ export default function ReceiptPDFViewer({ data }: { data: any }) {
             {/* Left: Received From */}
             <View style={styles.detailsCol}>
               <Text style={styles.sectionTitle}>Received From</Text>
-              {(data.customerId?.name || data.customerId?.firstName || data.customerName) ? (
+              {(data.customer?.name || data.customer?.firstName || data.customerName) ? (
                 <View style={styles.detailRow}>
                   <Text style={styles.detailLabel}>Client Name:</Text>
                   <Text style={styles.detailValue}>
-                    {data.customerName || data.customerId?.name || `${data.customerId?.firstName || ""} ${data.customerId?.lastName || ""}`}
+                    {data.customerName || data.customer?.name || `${data.customer?.firstName || ""} ${data.customer?.lastName || ""}`}
                   </Text>
                 </View>
               ) : null}
               
-              {data.customerId?.companyName ? (
+              {data.customer?.companyName ? (
                 <View style={styles.detailRow}>
                   <Text style={styles.detailLabel}>Company:</Text>
-                  <Text style={styles.detailValue}>{data.customerId?.companyName}</Text>
+                  <Text style={styles.detailValue}>{data.customer?.companyName}</Text>
                 </View>
               ) : null}
 
-              {data.customerId?.phone ? (
+              {data.customer?.phone ? (
                 <View style={styles.detailRow}>
                   <Text style={styles.detailLabel}>Phone:</Text>
-                  <Text style={styles.detailValue}>{data.customerId?.phone}</Text>
+                  <Text style={styles.detailValue}>{data.customer?.phone}</Text>
                 </View>
               ) : null}
             </View>
@@ -307,20 +307,20 @@ export default function ReceiptPDFViewer({ data }: { data: any }) {
                 </Text>
               </View>
 
-              {data.bookingId?.bookingRef ? (
+              {data.booking?.bookingRef ? (
                 <View style={styles.detailRow}>
                   <Text style={styles.detailLabel}>Booking Ref:</Text>
                   <Text style={styles.detailValue}>
-                    {data.bookingId?.bookingRef}
+                    {data.booking?.bookingRef}
                   </Text>
                 </View>
               ) : null}
 
-              {data.bookingId?.pnr ? (
+              {data.booking?.pnr ? (
                 <View style={styles.detailRow}>
                   <Text style={styles.detailLabel}>PNR:</Text>
                   <Text style={styles.detailValue}>
-                    {data.bookingId?.pnr}
+                    {data.booking?.pnr}
                   </Text>
                 </View>
               ) : null}
@@ -336,10 +336,10 @@ export default function ReceiptPDFViewer({ data }: { data: any }) {
 
             <View style={styles.tableRow}>
               <Text style={styles.tableCellLeft}>
-                Payment received for booking {data.bookingId?.bookingRef || ""}
+                Payment received for booking {data.booking?.bookingRef || ""}
               </Text>
               <Text style={styles.tableCellRight}>
-                Rs {data.amount?.toLocaleString()}
+                {data.currency || "PKR"} {data.amount?.toLocaleString()}
               </Text>
             </View>
           </View>
@@ -364,9 +364,31 @@ export default function ReceiptPDFViewer({ data }: { data: any }) {
 
             {/* Big Total (Right) */}
             <View style={styles.summarySection}>
-              <View style={styles.totalBoxContainer}>
+              {data.bookingId && (
+                <>
+                  <View style={styles.summaryRow}>
+                    <Text style={styles.summaryLabel}>Total Booking Cost:</Text>
+                    <Text style={styles.summaryValue}>
+                      {data.currency || "PKR"} {data.bookingTotal?.toLocaleString() || "0"}
+                    </Text>
+                  </View>
+                  <View style={styles.summaryRow}>
+                    <Text style={styles.summaryLabel}>Total Paid:</Text>
+                    <Text style={styles.summaryValue}>
+                      {data.currency || "PKR"} {data.totalPaid?.toLocaleString() || "0"}
+                    </Text>
+                  </View>
+                  <View style={styles.summaryRow}>
+                    <Text style={styles.summaryLabel}>Remaining Balance:</Text>
+                    <Text style={[styles.summaryValue, { color: "#ef4444" }]}>
+                      {data.currency || "PKR"} {data.balanceDue?.toLocaleString() || "0"}
+                    </Text>
+                  </View>
+                </>
+              )}
+              <View style={[styles.totalBoxContainer, { marginTop: 10 }]}>
                 <Text style={styles.totalBoxAmount}>
-                  Rs {data.amount?.toLocaleString()}
+                  {data.currency || "PKR"} {data.amount?.toLocaleString()}
                 </Text>
                 <Text style={styles.totalBoxLabel}>AMOUNT PAID</Text>
               </View>

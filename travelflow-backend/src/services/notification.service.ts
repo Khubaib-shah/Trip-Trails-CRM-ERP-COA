@@ -6,12 +6,12 @@ export interface CreateNotificationInput {
   type?: "info" | "success" | "warning" | "error";
   title: string;
   body: string;
-  entityType?: "lead" | "booking" | "receipt" | "customer" | "user" | "expense";
+  entityType?: "lead" | "booking" | "customer_payment" | "customer" | "user" | "expense";
   entityId?: string;
   branchId?: string;
 }
 
-export interface TenantContext {
+export interface AgencyContext {
   agencyId: string;
   branchId?: string;
 }
@@ -21,7 +21,7 @@ export interface PaginationOptions {
   limit: number;
 }
 
-export async function createNotification(ctx: TenantContext, input: CreateNotificationInput) {
+export async function createNotification(ctx: AgencyContext, input: CreateNotificationInput) {
   return prisma.notification.create({
     data: {
       agencyId: ctx.agencyId,
@@ -37,7 +37,7 @@ export async function createNotification(ctx: TenantContext, input: CreateNotifi
 }
 
 export async function listNotifications(
-  ctx: TenantContext,
+  ctx: AgencyContext,
   userId: string,
   pagination?: PaginationOptions
 ) {
@@ -67,7 +67,7 @@ export async function listNotifications(
   return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
 }
 
-export async function markAsRead(ctx: TenantContext, userId: string, notificationId: string) {
+export async function markAsRead(ctx: AgencyContext, userId: string, notificationId: string) {
   const notification = await prisma.notification.findFirst({
     where: { id: notificationId, agencyId: ctx.agencyId, recipientId: userId },
   });
@@ -78,7 +78,7 @@ export async function markAsRead(ctx: TenantContext, userId: string, notificatio
   });
 }
 
-export async function markAllAsRead(ctx: TenantContext, userId: string) {
+export async function markAllAsRead(ctx: AgencyContext, userId: string) {
   await prisma.notification.updateMany({
     where: { agencyId: ctx.agencyId, recipientId: userId, isRead: false },
     data: { isRead: true },
@@ -86,7 +86,7 @@ export async function markAllAsRead(ctx: TenantContext, userId: string) {
   return { success: true };
 }
 
-export async function deleteNotification(ctx: TenantContext, userId: string, notificationId: string) {
+export async function deleteNotification(ctx: AgencyContext, userId: string, notificationId: string) {
   const notification = await prisma.notification.findFirst({
     where: { id: notificationId, agencyId: ctx.agencyId, recipientId: userId },
   });

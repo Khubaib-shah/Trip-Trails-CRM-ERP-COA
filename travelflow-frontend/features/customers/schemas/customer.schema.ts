@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-const phoneRegex = /^(\+92|0)3[0-9]{2}[-\s]?[0-9]{7}$/;
+const phoneRegex = /^\+?[1-9]\d{6,14}$/;
 
 export const customerSchema = z
   .object({
@@ -11,8 +11,8 @@ export const customerSchema = z
     businessType: z.string().optional(),
     taxNumber: z.string().optional(),
     email: z.string().email("Invalid email address").optional().or(z.literal("")),
-    phone: z.string().regex(phoneRegex, "Enter a valid Pakistani number (03XX-XXXXXXX)"),
-    whatsapp: z.string().regex(phoneRegex, "Enter a valid Pakistani number").optional().or(z.literal("")),
+    phone: z.string().regex(phoneRegex, "Enter a valid phone number with country code (e.g. +923001234567)"),
+    whatsapp: z.string().regex(phoneRegex, "Enter a valid phone number with country code").optional().or(z.literal("")),
     dateOfBirth: z.string().optional(),
     gender: z.enum(["male", "female", "prefer_not_to_say"]).optional(),
     cnic: z.string().optional().or(z.literal("")),
@@ -21,7 +21,7 @@ export const customerSchema = z
     country: z.string().optional(),
     address: z.string().optional(),
     emergencyContactName: z.string().optional(),
-    emergencyContactPhone: z.string().optional().or(z.literal("")),
+    emergencyContactPhone: z.string().regex(phoneRegex, "Enter a valid phone number with country code").optional().or(z.literal("")),
     internalNotes: z.string().max(500).optional().or(z.literal("")),
   })
   .refine(

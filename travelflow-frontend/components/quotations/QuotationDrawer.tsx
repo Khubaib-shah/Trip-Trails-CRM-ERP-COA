@@ -5,6 +5,8 @@ import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@/lib/zod-resolver";
 import { showSuccess, showError } from "@/lib/toast-utils";
 import { Plus, Trash2 } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { queryKeys } from "@/lib/query-keys";
 
 import { DrawerForm } from "@/components/forms/DrawerForm";
 import { Button } from "@/components/ui/button";
@@ -12,10 +14,12 @@ import { Form } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import {
   FormField,
+  FormPhoneField,
   FormSelect,
   FormTextArea,
   FormCombobox,
 } from "@/components/forms/FormField";
+import { PhoneInput } from "@/components/ui/phone-input";
 
 import {
   quotationDefaultValues,
@@ -27,18 +31,28 @@ import {
 import type { QuotationItem, QuotationTax, Quotation } from "@/types/quotation";
 import type { Customer, Supplier, Branch, User } from "@/types";
 import type { Template } from "@/types/template";
+import { useBranchStore } from "@/store/branch.store";
 
 import { API } from "@/lib/data-source";
 
-function calcSubtotal(items: QuotationItem[]) {
-  return (items ?? []).reduce((acc, it) => acc + it.quantity * it.unitPrice, 0);
-}
+function calcTotals(items: QuotationItem[], taxes: QuotationTax[]) {
+  let subtotal = 0;
+  let totalCost = 0;
+  
+  (items ?? []).forEach((it) => {
+    subtotal += (it.quantity || 1) * (it.sellingPrice || 0);
+    totalCost += (it.quantity || 1) * (it.costPrice || 0);
+  });
 
-function calcTaxAmount(subtotal: number, taxes: QuotationTax[]) {
-  return (taxes ?? []).reduce((acc, t) => {
-    if (t.taxType === "fixed") return acc + t.value;
-    return acc + subtotal * (t.value / 100);
+  const estimatedProfit = subtotal - totalCost;
+
+  const taxAmount = (taxes ?? []).reduce((acc, t) => {
+    const val = Number(t.value || 0);
+    if (t.taxType === "fixed") return acc + val;
+    return acc + estimatedProfit * (val / 100);
   }, 0);
+
+  return { subtotal, estimatedProfit, taxAmount };
 }
 
 function formatMoney(n: unknown) {
@@ -78,6 +92,8 @@ export function QuotationDrawer({
   onEditFromView?: () => void;
   onCreateFromView?: () => void;
 }) {
+  const queryClient = useQueryClient();
+  const activeCurrency = useBranchStore(state => state.activeCurrency);
   const isViewMode = mode === "view";
 
   const [newCustomer, setNewCustomer] = useState({
@@ -88,17 +104,19 @@ export function QuotationDrawer({
 
   const [notesTemplates, setNotesTemplates] = useState<Template[]>([]);
   const [termsTemplates, setTermsTemplates] = useState<Template[]>([]);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
 
   useEffect(() => {
     if (isOpen) {
       API.getTemplates("quotation_notes").then(setNotesTemplates).catch(console.error);
       API.getTemplates("quotation_terms").then(setTermsTemplates).catch(console.error);
+      API.getSuppliers().then(setSuppliers).catch(console.error);
     }
   }, [isOpen]);
 
   const form = useForm<QuotationFormValues>({
     resolver: zodResolver(quotationSchema),
-    defaultValues: { ...quotationDefaultValues, ...initialValues },
+    defaultValues: { ...quotationDefaultValues, currency: activeCurrency, ...initialValues },
   });
 
   const {
@@ -120,15 +138,13 @@ export function QuotationDrawer({
   const watchedItemsArray = Array.isArray(watchedItems) ? watchedItems : [];
   const watchedTaxesArray = Array.isArray(watchedTaxes) ? watchedTaxes : [];
 
-  const subtotal = useMemo(
-    () => calcSubtotal(watchedItemsArray as any),
-    [watchedItemsArray],
+  const { subtotal, estimatedProfit, taxAmount } = useMemo(
+    () => calcTotals(watchedItemsArray as any, watchedTaxesArray as any),
+    [watchedItemsArray, watchedTaxesArray],
   );
-  const taxAmount = useMemo(
-    () => calcTaxAmount(subtotal, watchedTaxesArray as any),
-    [subtotal, watchedTaxesArray],
-  );
+
   const grandTotal = subtotal + taxAmount;
+  const currentCurrency = form.watch("currency") || activeCurrency;
 
   useEffect(() => {
     if (!isOpen) return;
@@ -184,6 +200,12 @@ export function QuotationDrawer({
             ? `Ref: ${finalQuotation.quotationRef}`
             : undefined,
         });
+      }
+
+      // Invalidate queries to ensure UI updates immediately
+      queryClient.invalidateQueries({ queryKey: queryKeys.quotations.all });
+      if (editingId) {
+        queryClient.invalidateQueries({ queryKey: queryKeys.quotations.detail(editingId) });
       }
 
       await onSaved(finalQuotation);
@@ -278,13 +300,12 @@ export function QuotationDrawer({
                     </div>
                     <div className="space-y-2">
                       <div className="text-sm font-medium text-tf-text-secondary">Phone <span className="text-tf-danger">*</span></div>
-                      <Input
+                      <PhoneInput
                         value={newCustomer.phone}
-                        onChange={(e) =>
-                          setNewCustomer({ ...newCustomer, phone: e.target.value })
+                        onChange={(val) =>
+                          setNewCustomer({ ...newCustomer, phone: val })
                         }
-                        placeholder="03XX-XXXXXXX"
-                        required
+                        placeholder="Enter phone number"
                         disabled={isViewMode}
                       />
                     </div>
@@ -318,7 +339,7 @@ export function QuotationDrawer({
                   required
                   disabled={isViewMode}
                 />
-                <FormSelect
+                <FormCombobox
                   control={form.control}
                   name="travelType"
                   label="Travel Type"
@@ -373,71 +394,133 @@ export function QuotationDrawer({
               </h4>
               <div className="space-y-3">
                 {itemFields.map((field, index) => (
-                  <div
-                    key={field.id}
-                    className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end"
-                  >
-                    <div className="md:col-span-6">
-                      <FormField
-                        control={form.control}
-                        name={`items.${index}.description` as const}
-                        label={index === 0 ? "Description" : ""}
-                        placeholder="e.g. Umrah package"
-                        required
-                        disabled={isViewMode}
-                      />
+                    <div
+                      key={field.id}
+                      className="grid grid-cols-1 md:grid-cols-12 gap-3 items-start bg-tf-surface-2 p-4 rounded-lg border border-tf-border relative"
+                    >
+                      <div className="md:col-span-3 space-y-3">
+                        <FormCombobox
+                          control={form.control}
+                          name={`items.${index}.serviceCategory` as const}
+                          label="Category"
+                          options={[
+                            { label: "Flight", value: "flight" },
+                            { label: "Hotel", value: "hotel" },
+                            { label: "Transfer", value: "transfer" },
+                            { label: "Insurance", value: "insurance" },
+                            { label: "Visa", value: "visa" },
+                            { label: "Activity", value: "activity" },
+                            { label: "Other", value: "other" },
+                          ]}
+                          required
+                          disabled={isViewMode}
+                        />
+                      </div>
+                      <div className="md:col-span-3 space-y-3">
+                        <FormCombobox
+                          control={form.control}
+                          name={`items.${index}.supplierId` as const}
+                          label="Supplier"
+                          options={(suppliers || [])
+                            .filter((s) => {
+                              const cat = watchedItemsArray[index]?.serviceCategory;
+                              if (!cat || cat === "other") return true;
+                              const validCats = cat === "flight" ? ["airline", "consolidator"] : cat === "transfer" ? ["transport"] : [cat, "consolidator", "other"];
+                              return !s.category || validCats.includes(s.category);
+                            })
+                            .map((s) => ({
+                              label: s.name,
+                              value: s.id,
+                            }))}
+                          disabled={isViewMode}
+                        />
+                      </div>
+                      <div className="md:col-span-3 space-y-3">
+                        <FormField
+                          control={form.control}
+                          name={`items.${index}.title` as const}
+                          label="Title"
+                          placeholder="e.g. DXB-KHI Flight"
+                          required
+                          disabled={isViewMode}
+                        />
+                      </div>
+                      <div className="md:col-span-3 space-y-3">
+                        <FormField
+                          control={form.control}
+                          name={`items.${index}.description` as const}
+                          label="Notes"
+                          placeholder="Optional"
+                          disabled={isViewMode}
+                        />
+                      </div>
+                      
+                      <div className="md:col-span-3 space-y-3">
+                        <FormField
+                          control={form.control}
+                          name={`items.${index}.quantity` as const}
+                          label="Qty"
+                          type="number"
+                          required
+                          disabled={isViewMode}
+                        />
+                      </div>
+                      <div className="md:col-span-4 space-y-3">
+                        <FormField
+                          control={form.control}
+                          name={`items.${index}.costPrice` as const}
+                          label={`Cost Price (${currentCurrency})`}
+                          type="number"
+                          required
+                          disabled={isViewMode}
+                        />
+                      </div>
+                      <div className="md:col-span-4 space-y-3">
+                        <FormField
+                          control={form.control}
+                          name={`items.${index}.sellingPrice` as const}
+                          label={`Selling Price (${currentCurrency})`}
+                          type="number"
+                          required
+                          disabled={isViewMode}
+                        />
+                      </div>
+                      <div className="md:col-span-1 pt-8 flex justify-end">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          className="text-tf-danger hover:bg-tf-danger/10 hover:text-tf-danger"
+                          onClick={() => removeItem(index)}
+                          disabled={isViewMode || itemFields.length <= 1}
+                          aria-label="Remove item"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </div>
-                    <div className="md:col-span-2">
-                      <FormField
-                        control={form.control}
-                        name={`items.${index}.quantity` as const}
-                        label={index === 0 ? "Qty" : ""}
-                        type="number"
-                        required
-                        disabled={isViewMode}
-                      />
-                    </div>
-                    <div className="md:col-span-3">
-                      <FormField
-                        control={form.control}
-                        name={`items.${index}.unitPrice` as const}
-                        label={index === 0 ? "Unit Price (PKR)" : ""}
-                        type="number"
-                        required
-                        disabled={isViewMode}
-                      />
-                    </div>
-                    <div className="md:col-span-1 flex justify-end">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="border-tf-border text-tf-text-muted hover:text-tf-text-primary"
-                        onClick={() => removeItem(index)}
-                        disabled={isViewMode || itemFields.length <= 1}
-                        aria-label="Remove item"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                ))}
+                  ))}
 
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="w-full border-dashed border-tf-border text-tf-text-secondary hover:bg-tf-surface-2"
-                  disabled={isViewMode}
-                  onClick={() =>
-                    appendItem({
-                      id: undefined,
-                      description: "",
-                      quantity: 1,
-                      unitPrice: 0,
-                    })
-                  }
-                >
-                  <Plus className="mr-2 h-4 w-4" /> Add Item
-                </Button>
+                  {!isViewMode && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="w-full border-dashed border-tf-border text-tf-text-secondary hover:bg-tf-surface-2 mt-4"
+                      onClick={() =>
+                        appendItem({
+                          id: undefined,
+                          serviceCategory: "other",
+                          title: "",
+                          description: "",
+                          supplierId: undefined,
+                          quantity: 1,
+                          costPrice: 0,
+                          sellingPrice: 0,
+                        })
+                      }
+                    >
+                      <Plus className="mr-2 h-4 w-4" /> Add Item
+                    </Button>
+                  )}
               </div>
             </div>
 
@@ -582,7 +665,7 @@ export function QuotationDrawer({
                 </div>
               </div>
 
-              <FormSelect
+              <FormCombobox
                 control={form.control}
                 name="status"
                 label="Quotation Status"

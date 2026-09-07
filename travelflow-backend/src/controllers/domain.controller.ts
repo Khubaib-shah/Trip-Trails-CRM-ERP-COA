@@ -4,7 +4,7 @@ import { ApiError } from "../utils/ApiError";
 import * as domain from "../services/domain.service";
 
 
-function buildContext(req: Request): domain.TenantContext {
+function buildContext(req: Request): domain.AgencyContext {
   const branchIdQuery = req.query.branchId as string | undefined;
 
   // Prevent branchId injection (P0-5): Only admin can query branches other than their own
@@ -334,6 +334,13 @@ export async function createUser(req: Request, res: Response) {
   );
 }
 
+export async function resetUserPassword(req: Request, res: Response) {
+  ApiResponse.success(
+    res,
+    await domain.resetUserPassword(buildContext(req), req.params.id, req.body.newPassword),
+  );
+}
+
 export async function updateUser(req: Request, res: Response) {
   const user = await domain.updateUser(
     buildContext(req),
@@ -452,19 +459,53 @@ export async function recordSupplierPayment(
   ApiResponse.success(res, supplier);
 }
 
-// ─── Receipts ─────────────────────────────────────────────────────────────────
+// ─── Customer Payments ────────────────────────────────────────────────────────
 
-export async function listReceipts(req: Request, res: Response) {
-  ApiResponse.success(res, await domain.listReceipts(buildContext(req), getPagination(req), getDateFilter(req)));
+export async function listCustomerPayments(req: Request, res: Response) {
+  ApiResponse.success(res, await domain.listCustomerPayments(buildContext(req), getPagination(req), getDateFilter(req)));
 }
 
-export async function createReceipt(req: Request, res: Response) {
-  const receipt = await domain.createReceipt(
+export async function getCustomerPayment(req: Request, res: Response) {
+  const payment = await domain.getCustomerPayment(buildContext(req), req.params.id);
+  if (!payment) throw ApiError.notFound("Payment");
+  ApiResponse.success(res, payment);
+}
+
+export async function createCustomerPayment(req: Request, res: Response) {
+  const payment = await domain.createCustomerPayment(
     buildContext(req),
     req.body,
     actor(req),
   );
-  ApiResponse.created(res, receipt);
+  ApiResponse.created(res, payment);
+}
+
+export async function allocateCustomerPayment(req: Request, res: Response) {
+  const result = await domain.allocateCustomerPayment(
+    buildContext(req),
+    req.params.id,
+    req.body.allocations
+  );
+  ApiResponse.success(res, result);
+}
+
+export async function allocateSupplierPayment(req: Request, res: Response) {
+  const result = await domain.allocateSupplierPayment(
+    buildContext(req),
+    req.params.id,
+    req.body.allocations
+  );
+  ApiResponse.success(res, result);
+}
+
+export async function getARLedger(req: Request, res: Response) {
+  const ledger = await domain.getARLedger(buildContext(req));
+  ApiResponse.success(res, ledger);
+}
+
+export async function getAPLedger(req: Request, res: Response) {
+  const ledger = await domain.getAPLedger(buildContext(req));
+  ApiResponse.success(res, ledger);
 }
 
 // ─── Booking Documents ────────────────────────────────────────────────────────
