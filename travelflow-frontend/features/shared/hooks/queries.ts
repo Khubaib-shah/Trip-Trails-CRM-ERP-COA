@@ -7,6 +7,7 @@ export function useBranches() {
   return useQuery({
     queryKey: queryKeys.shared.branches(),
     queryFn: () => API.getBranches(),
+    placeholderData: (previousData) => previousData,
     staleTime: Infinity, // Branches rarely change
     gcTime: Infinity,
   });
@@ -36,6 +37,7 @@ export function useRoles() {
   return useQuery({
     queryKey: queryKeys.shared.roles(),
     queryFn: () => API.getRoles(),
+    placeholderData: (previousData) => previousData,
     staleTime: Infinity,
     gcTime: Infinity,
   });

@@ -4,9 +4,7 @@ import { useState } from "react";
 import { ArrowLeft } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { useQuery } from "@tanstack/react-query";
-import { API } from "@/lib/data-source";
-import { queryKeys } from "@/lib/query-keys";
+import { useBalanceSheet } from "@/features/finance/hooks/queries";
 import { DateRangePicker } from "@/components/shared/DateRangePicker";
 import { DateRange } from "react-day-picker";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -19,10 +17,7 @@ export default function BalanceSheetPage() {
   const activeCurrency = useBranchStore(state => state.activeCurrency);
   const [dateRange, setDateRange] = useState<DateRange | undefined>();
 
-  const { data: report, isLoading } = useQuery({
-    queryKey: queryKeys.accounting.reports.balanceSheet(dateRange?.to || new Date()),
-    queryFn: () => API.getBalanceSheet(dateRange?.to || new Date()),
-  });
+  const { data: report, isLoading } = useBalanceSheet(dateRange?.to || new Date());
 
   return (
     <div className="space-y-6">

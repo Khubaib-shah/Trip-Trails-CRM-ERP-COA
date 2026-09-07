@@ -1,42 +1,26 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { DataTable } from "@/components/tables/DataTable";
-import { API } from "@/lib/data-source";
 import { formatCurrency } from "@/lib/utils";
-import { PageSkeleton } from "@/components/shared/PageSkeleton";
-import { showError, showSuccess } from "@/lib/toast-utils";
+import { showSuccess } from "@/lib/toast-utils";
 import { FileSpreadsheet } from "lucide-react";
 import { exportARLedger } from "@/lib/export-utils";
 import { useBranchStore } from "@/store/branch.store";
-import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useRouter } from "next/navigation";
 import { PageHeader } from "@/components/shared/PageHeader";
+import { useARLedger } from "@/features/finance/hooks/queries";
 
 export default function ARLedgerPage() {
   const activeCurrency = useBranchStore((state) => state.activeCurrency);
   const router = useRouter();
-  const [data, setData] = useState<any[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const { data = [], isLoading } = useARLedger();
 
-  useEffect(() => {
-    const load = async () => {
-      try {
-        const res = await API.getARLedger();
-        setData(res);
-      } catch (err: any) {
-        showError(err.message || "Failed to load AR Ledger");
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    load();
-  }, []);
-
-  if (isLoading) return <PageSkeleton />;
-
-  const totalOutstanding = data.reduce((sum, row) => sum + row.outstandingBalance, 0);
+  const totalOutstanding = data.reduce(
+    (sum: number, row: any) => sum + (row.outstandingBalance || 0),
+    0
+  );
 
   const columns = [
     {
@@ -91,10 +75,15 @@ export default function ARLedgerPage() {
 
         <div className="flex flex-col items-end gap-2">
           <p className="text-sm font-medium text-tf-text-secondary">Total Outstanding AR</p>
-          <p className="text-3xl font-bold text-red-500">{formatCurrency(totalOutstanding)}</p>
+          {isLoading && !data.length ? (
+            <Skeleton className="h-9 w-36" />
+          ) : (
+            <p className="text-3xl font-bold text-red-500">{formatCurrency(totalOutstanding)}</p>
+          )}
           <Button
             variant="outline"
             size="sm"
+            disabled={isLoading && !data.length}
             onClick={() => {
               exportARLedger(data, activeCurrency);
               showSuccess("AR Ledger exported");
@@ -112,6 +101,7 @@ export default function ARLedgerPage() {
           data={data}
           searchKey="name"
           searchPlaceholder="Search customers..."
+          isLoading={isLoading}
         />
       </div>
     </div>

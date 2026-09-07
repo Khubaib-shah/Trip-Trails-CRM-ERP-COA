@@ -1,6 +1,5 @@
 "use client";
 
-import { useState, useEffect } from "react";
 import { Scale, FileSpreadsheet } from "lucide-react";
 import { ColumnDef } from "@tanstack/react-table";
 
@@ -9,37 +8,20 @@ import { DataTableColumnHeader } from "@/components/tables/DataTableColumnHeader
 import { EmptyState } from "@/components/shared/EmptyState";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { API } from "@/lib/data-source";
+import { Skeleton } from "@/components/ui/skeleton";
 import type { TrialBalanceAccount } from "@/types/finance";
 import { exportTrialBalance } from "@/lib/export-utils";
 import { useBranchStore } from "@/store/branch.store";
 import { showSuccess } from "@/lib/toast-utils";
+import { useTrialBalance } from "@/features/finance/hooks/queries";
 
 export default function TrialBalancePage() {
   const activeCurrency = useBranchStore((state) => state.activeCurrency);
-  const [data, setData] = useState<TrialBalanceAccount[]>([]);
-  const [totalDebits, setTotalDebits] = useState(0);
-  const [totalCredits, setTotalCredits] = useState(0);
-  const [isLoading, setIsLoading] = useState(true);
+  const { data: response, isLoading } = useTrialBalance();
 
-  const load = async () => {
-    setIsLoading(true);
-    try {
-      const result = await API.getTrialBalance();
-      setData(result.accounts || []);
-      setTotalDebits(result.totalDebits || 0);
-      setTotalCredits(result.totalCredits || 0);
-    } catch {
-      // ignore
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    load();
-  }, []);
-
+  const data: TrialBalanceAccount[] = response?.accounts || [];
+  const totalDebits = response?.totalDebits || 0;
+  const totalCredits = response?.totalCredits || 0;
   const isBalanced = Math.abs(totalDebits - totalCredits) < 0.01;
 
   const columns: ColumnDef<TrialBalanceAccount>[] = [
@@ -100,15 +82,20 @@ export default function TrialBalancePage() {
             Summary of all account balances to verify debits equal credits.
           </p>
         </div>
-        <Badge
-          variant={isBalanced ? "default" : "destructive"}
-          className={isBalanced ? "bg-green-100 text-green-800 border-green-200" : ""}
-        >
-          {isBalanced ? "Balanced" : "Unbalanced"}
-        </Badge>
+        {isLoading && !response ? (
+          <Skeleton className="h-6 w-24 rounded-full" />
+        ) : (
+          <Badge
+            variant={isBalanced ? "default" : "destructive"}
+            className={isBalanced ? "bg-green-100 text-green-800 border-green-200" : ""}
+          >
+            {isBalanced ? "Balanced" : "Unbalanced"}
+          </Badge>
+        )}
         <Button
           variant="outline"
           size="sm"
+          disabled={isLoading && !data.length}
           onClick={() => {
             exportTrialBalance(data, totalDebits, totalCredits, activeCurrency);
             showSuccess("Trial Balance exported");
@@ -138,15 +125,23 @@ export default function TrialBalancePage() {
         <div className="mt-4 flex items-center justify-end gap-8 border-t border-tf-border pt-4">
           <div className="text-sm">
             <span className="text-tf-text-secondary">Total Debits: </span>
-            <span className="font-semibold text-tf-text-primary">
-              {totalDebits.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-            </span>
+            {isLoading && !response ? (
+              <Skeleton className="h-4 w-20 inline-block align-middle ml-1" />
+            ) : (
+              <span className="font-semibold text-tf-text-primary">
+                {totalDebits.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
+            )}
           </div>
           <div className="text-sm">
             <span className="text-tf-text-secondary">Total Credits: </span>
-            <span className="font-semibold text-tf-text-primary">
-              {totalCredits.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-            </span>
+            {isLoading && !response ? (
+              <Skeleton className="h-4 w-20 inline-block align-middle ml-1" />
+            ) : (
+              <span className="font-semibold text-tf-text-primary">
+                {totalCredits.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
+            )}
           </div>
         </div>
       </div>

@@ -8,7 +8,6 @@ import { zodResolver } from "@/lib/zod-resolver";
 import { showSuccess, showError } from "@/lib/toast-utils";
 
 import { User } from "@/types";
-import { PageSkeleton } from "@/components/shared/PageSkeleton";
 import { Role, PERMISSION_GROUPS } from "@/types/role";
 import { useRoles, useCreateRole, useUpdateRolePermissions, useDeleteRole, useUsers } from "@/features/shared/hooks/queries";
 import { Button } from "@/components/ui/button";
@@ -178,10 +177,6 @@ export default function RolesPage() {
     }
   };
 
-  if (isLoading) {
-    return <PageSkeleton />;
-  }
-
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center bg-tf-surface p-6 rounded-xl border border-tf-border shadow-sm">
@@ -214,7 +209,16 @@ export default function RolesPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {roles.map((role) => (
+            {isLoading && !roles.length ? (
+              [1, 2, 3, 4].map((i) => (
+                <TableRow key={i}>
+                  <TableCell colSpan={5}>
+                    <div className="h-8 bg-tf-surface-2 animate-pulse rounded my-1 w-full" />
+                  </TableCell>
+                </TableRow>
+              ))
+            ) : (
+              roles.map((role) => (
               <TableRow key={role.id}>
                 <TableCell>
                   <div className="flex items-center gap-3">
@@ -270,15 +274,16 @@ export default function RolesPage() {
                   )}
                 </TableCell>
               </TableRow>
-            ))}
-            {roles.length === 0 && !isLoading && (
-              <TableRow>
-                <TableCell colSpan={5} className="h-24 text-center text-tf-text-muted">
-                  No roles found.
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
+            ))
+          )}
+          {roles.length === 0 && !isLoading && (
+            <TableRow>
+              <TableCell colSpan={5} className="h-24 text-center text-tf-text-muted">
+                No roles found.
+              </TableCell>
+            </TableRow>
+          )}
+        </TableBody>
         </Table>
       </div>
 

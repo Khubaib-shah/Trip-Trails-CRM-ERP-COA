@@ -52,6 +52,7 @@ export function useAccounts() {
   return useQuery({
     queryKey: queryKeys.accounting.accounts.list(),
     queryFn: () => API.getChartOfAccounts(),
+    placeholderData: (previousData) => previousData,
     staleTime: 60_000,
   });
 }
@@ -145,5 +146,80 @@ export function useDeleteAccount() {
     },
   });
 }
+
+export function useJournalEntries() {
+  return useQuery({
+    queryKey: queryKeys.accounting.journalEntries.list(),
+    queryFn: () => API.getJournalEntries(),
+    placeholderData: (previousData) => previousData,
+    staleTime: 60_000,
+  });
+}
+
+export function useReverseJournalEntry() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, reason }: { id: string; reason?: string }) =>
+      API.reverseJournalEntry(id, reason),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.accounting.all });
+    },
+  });
+}
+
+export function useTrialBalance() {
+  return useQuery({
+    queryKey: queryKeys.accounting.reports.trialBalance(),
+    queryFn: () => API.getTrialBalance(),
+    placeholderData: (previousData) => previousData,
+    staleTime: 60_000,
+  });
+}
+
+export function useARLedger() {
+  return useQuery({
+    queryKey: queryKeys.accounting.reports.arLedger(),
+    queryFn: () => API.getARLedger(),
+    placeholderData: (previousData) => previousData,
+    staleTime: 60_000,
+  });
+}
+
+export function useAPLedger() {
+  return useQuery({
+    queryKey: queryKeys.accounting.reports.apLedger(),
+    queryFn: () => API.getAPLedger(),
+    placeholderData: (previousData) => previousData,
+    staleTime: 60_000,
+  });
+}
+
+export function useProfitAndLoss(dateRange?: { from?: Date; to?: Date }) {
+  return useQuery({
+    queryKey: queryKeys.accounting.reports.profitAndLoss(dateRange),
+    queryFn: () => API.getProfitAndLoss(dateRange?.from, dateRange?.to),
+    placeholderData: (previousData) => previousData,
+    staleTime: 60_000,
+  });
+}
+
+export function useBalanceSheet(asOfDate?: Date) {
+  return useQuery({
+    queryKey: queryKeys.accounting.reports.balanceSheet(asOfDate),
+    queryFn: () => API.getBalanceSheet(asOfDate),
+    placeholderData: (previousData) => previousData,
+    staleTime: 60_000,
+  });
+}
+
+export function useAnalytics(params?: { timeRange?: string; branchId?: string }) {
+  return useQuery({
+    queryKey: queryKeys.reports.analytics(params),
+    queryFn: () => API.getAnalytics(params),
+    placeholderData: (previousData) => previousData,
+    staleTime: 60_000,
+  });
+}
+
 
 

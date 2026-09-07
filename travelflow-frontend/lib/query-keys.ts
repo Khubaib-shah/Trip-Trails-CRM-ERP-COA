@@ -72,7 +72,15 @@ export const queryKeys = {
       trialBalance: () => ["accounting", "reports", "trialBalance"] as const,
       profitAndLoss: (dates: any) => ["accounting", "reports", "profitAndLoss", dates] as const,
       balanceSheet: (date: any) => ["accounting", "reports", "balanceSheet", date] as const,
+      arLedger: () => ["accounting", "reports", "arLedger"] as const,
+      apLedger: () => ["accounting", "reports", "apLedger"] as const,
     },
+  },
+
+  // --- Reports & Analytics ---
+  reports: {
+    all: ["reports"] as const,
+    analytics: (params?: { timeRange?: string; branchId?: string }) => ["reports", "analytics", params] as const,
   },
 
   // --- Payment Schedules ---

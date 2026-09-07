@@ -1,6 +1,5 @@
 "use client";
 
-import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { ScrollText, Plus, FileSpreadsheet } from "lucide-react";
 import { ColumnDef } from "@tanstack/react-table";
@@ -10,41 +9,36 @@ import { DataTableColumnHeader } from "@/components/tables/DataTableColumnHeader
 import { StatusBadge } from "@/components/shared/StatusBadge";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { Button } from "@/components/ui/button";
-import { API } from "@/lib/data-source";
 import type { JournalEntry } from "@/types/finance";
 import { exportJournalEntries } from "@/lib/export-utils";
 import { useBranchStore } from "@/store/branch.store";
-import { showSuccess } from "@/lib/toast-utils";
+import { showSuccess, showError } from "@/lib/toast-utils";
+import {
+  useJournalEntries,
+  useReverseJournalEntry,
+} from "@/features/finance/hooks/queries";
 
 export default function JournalEntriesPage() {
   const activeCurrency = useBranchStore((state) => state.activeCurrency);
   const router = useRouter();
-  const [data, setData] = useState<JournalEntry[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-
-  const load = async () => {
-    setIsLoading(true);
-    try {
-      const entries = await API.getJournalEntries();
-      setData(entries);
-    } catch {
-      // ignore
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    load();
-  }, []);
+  const { data = [], isLoading } = useJournalEntries();
+  const reverseMutation = useReverseJournalEntry();
 
   const handleReverse = async (id: string, entryNumber: string) => {
-    if (!confirm(`Reverse journal entry ${entryNumber}? This will create a new entry that cancels out this one.`)) return;
+    if (
+      !confirm(
+        `Reverse journal entry ${entryNumber}? This will create a new entry that cancels out this one.`
+      )
+    )
+      return;
     try {
-      await API.reverseJournalEntry(id, `Manual reversal of ${entryNumber}`);
-      await load();
+      await reverseMutation.mutateAsync({
+        id,
+        reason: `Manual reversal of ${entryNumber}`,
+      });
+      showSuccess(`Journal entry ${entryNumber} reversed`);
     } catch (e: any) {
-      alert(e?.message || "Failed to reverse entry");
+      showError(e?.message || "Failed to reverse entry");
     }
   };
 

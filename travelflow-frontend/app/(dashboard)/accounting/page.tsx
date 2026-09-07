@@ -419,9 +419,13 @@ export default function ChartOfAccountsPage() {
         <div>
           <div className="flex items-center gap-3">
             <h1 className="tf-h2 text-tf-text-primary">Chart of Accounts</h1>
-            <Badge variant="secondary" className="font-mono text-xs">
-              {data.length} Accounts
-            </Badge>
+            {isLoading && !data.length ? (
+              <span className="inline-block w-20 h-5 bg-tf-surface-2 animate-pulse rounded-md" />
+            ) : (
+              <Badge variant="secondary" className="font-mono text-xs">
+                {data.length} Accounts
+              </Badge>
+            )}
           </div>
           <p className="tf-body text-tf-text-secondary mt-1">
             Authoritative general ledger structure, default system accounts, and custom account extensions.
@@ -430,6 +434,7 @@ export default function ChartOfAccountsPage() {
         <div className="flex items-center gap-3">
           <Button
             variant="outline"
+            disabled={isLoading && !data.length}
             onClick={() => {
               exportChartOfAccounts(filteredData, activeCurrency);
               showSuccess("Chart of Accounts exported successfully.");

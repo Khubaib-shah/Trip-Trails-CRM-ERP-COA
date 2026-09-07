@@ -1,42 +1,26 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { DataTable } from "@/components/tables/DataTable";
-import { API } from "@/lib/data-source";
 import { formatCurrency } from "@/lib/utils";
-import { PageSkeleton } from "@/components/shared/PageSkeleton";
-import { showError, showSuccess } from "@/lib/toast-utils";
+import { showSuccess } from "@/lib/toast-utils";
 import { FileSpreadsheet } from "lucide-react";
 import { exportAPLedger } from "@/lib/export-utils";
 import { useBranchStore } from "@/store/branch.store";
-import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useRouter } from "next/navigation";
 import { PageHeader } from "@/components/shared/PageHeader";
+import { useAPLedger } from "@/features/finance/hooks/queries";
 
 export default function APLedgerPage() {
   const activeCurrency = useBranchStore((state) => state.activeCurrency);
   const router = useRouter();
-  const [data, setData] = useState<any[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const { data = [], isLoading } = useAPLedger();
 
-  useEffect(() => {
-    const load = async () => {
-      try {
-        const res = await API.getAPLedger();
-        setData(res);
-      } catch (err: any) {
-        showError(err.message || "Failed to load AP Ledger");
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    load();
-  }, []);
-
-  if (isLoading) return <PageSkeleton />;
-
-  const totalOutstanding = data.reduce((sum, row) => sum + row.outstandingBalance, 0);
+  const totalOutstanding = data.reduce(
+    (sum: number, row: any) => sum + (row.outstandingBalance || 0),
+    0
+  );
 
   const columns = [
     {
@@ -89,11 +73,16 @@ export default function APLedgerPage() {
         />
 
         <div className="flex flex-col items-end gap-2">
-          <p className="text-sm font-medium">Total Outstanding AP</p>
-          <p className="text-3xl font-bold text-red-500">{formatCurrency(totalOutstanding)}</p>
+          <p className="text-sm font-medium text-tf-text-secondary">Total Outstanding AP</p>
+          {isLoading && !data.length ? (
+            <Skeleton className="h-9 w-36" />
+          ) : (
+            <p className="text-3xl font-bold text-red-500">{formatCurrency(totalOutstanding)}</p>
+          )}
           <Button
             variant="outline"
             size="sm"
+            disabled={isLoading && !data.length}
             onClick={() => {
               exportAPLedger(data, activeCurrency);
               showSuccess("AP Ledger exported");
@@ -111,6 +100,7 @@ export default function APLedgerPage() {
           data={data}
           searchKey="name"
           searchPlaceholder="Search suppliers..."
+          isLoading={isLoading}
         />
       </div>
     </div >

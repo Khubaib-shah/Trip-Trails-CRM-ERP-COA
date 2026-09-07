@@ -55,8 +55,22 @@ export function QueryProvider({ children }: { children: React.ReactNode }) {
         maxAge: 1000 * 60 * 60 * 24 * 7, // 7 days
         dehydrateOptions: {
           shouldDehydrateQuery: (query) => {
-            // Only persist queries that explicitly set `gcTime` high or belong to shared
-            return query.queryKey[0] === "shared" || query.queryKey[0] === "dashboard";
+            const allowed = [
+              "shared",
+              "dashboard",
+              "accounting",
+              "reports",
+              "leads",
+              "customers",
+              "quotations",
+              "bookings",
+              "finance",
+              "suppliers",
+            ];
+            return (
+              allowed.includes(String(query.queryKey[0])) &&
+              query.state.status === "success"
+            );
           },
         },
       }}

@@ -15,9 +15,10 @@ import { FormSelect, FormCombobox } from "@/components/forms/FormField";
 import { useForm, useWatch } from "react-hook-form";
 import { Form } from "@/components/ui/form";
 import { formatCurrency } from "@/lib/utils";
-import { ApiClient } from "@/lib/api-client";
 import { useAuthStore } from "@/store/auth.store";
 import { useBranchStore } from "@/store/branch.store";
+import { useAnalytics } from "@/features/finance/hooks/queries";
+import { useBranches } from "@/features/shared/hooks/queries";
 
 // Define the expected API response type
 interface AnalyticsResponse {
@@ -47,56 +48,26 @@ export default function ReportsPage() {
   const timeRange = useWatch({ control: form.control, name: "timeRange" });
   const branchId = useWatch({ control: form.control, name: "branchId" });
 
-  const [data, setData] = useState<AnalyticsResponse | null>(null);
-  const [branches, setBranches] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data: branches = [] } = useBranches();
+  const {
+    data: rawData,
+    isLoading,
+    isFetching,
+  } = useAnalytics({
+    timeRange,
+    branchId: branchId === "all" ? undefined : branchId,
+  });
 
-  useEffect(() => {
-    async function loadData() {
-      setLoading(true);
-      try {
-        const [analyticsRes, branchesRes] = await Promise.all([
-          ApiClient.getAnalytics({ timeRange, branchId }),
-          isAdmin ? ApiClient.getBranches() : Promise.resolve([])
-        ]);
-        setData(analyticsRes as AnalyticsResponse);
-        if (isAdmin && branchesRes) {
-          setBranches(branchesRes);
-        }
-      } catch (error) {
-        console.error("Failed to load analytics", error);
-      } finally {
-        setLoading(false);
-      }
-    }
-    loadData();
-  }, [timeRange, branchId, isAdmin]);
-
-  // Loading Skeleton
-  if (loading && !data) {
-    return (
-      <div className="space-y-6 pb-12 animate-pulse">
-        <div className="bg-tf-surface-2 h-24 rounded-xl border border-tf-border w-full"></div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {[1, 2, 3, 4].map((i) => (
-            <div
-              key={i}
-              className="bg-tf-surface-2 h-32 rounded-xl"
-            ></div>
-          ))}
-        </div>
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 bg-tf-surface-2 h-96 rounded-xl"></div>
-          <div className="bg-tf-surface-2 h-96 rounded-xl"></div>
-          <div className="lg:col-span-3 bg-tf-surface-2 h-96 rounded-xl"></div>
-        </div>
-      </div>
-    );
-  }
-
-  if (!data) return null;
-
-  const { kpis, revenueData, leadSourceData, branchData } = data;
+  const data = rawData as AnalyticsResponse | undefined;
+  const kpis = data?.kpis || {
+    totalRevenue: 0,
+    totalProfit: 0,
+    totalBookings: 0,
+    profitMargin: "0",
+  };
+  const revenueData = data?.revenueData || [];
+  const leadSourceData = data?.leadSourceData || [];
+  const branchData = data?.branchData || [];
 
   return (
     <div className="space-y-6 pb-12">
@@ -145,9 +116,26 @@ export default function ReportsPage() {
         </Form>
       </div>
 
-      <div className={`space-y-6 transition-opacity duration-200 ${loading ? "opacity-50 pointer-events-none" : ""}`}>
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      {isLoading && !data ? (
+        <div className="space-y-6 animate-pulse">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {[1, 2, 3, 4].map((i) => (
+              <div
+                key={i}
+                className="bg-tf-surface-2 h-32 rounded-xl border border-tf-border"
+              />
+            ))}
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-2 bg-tf-surface-2 h-96 rounded-xl border border-tf-border" />
+            <div className="bg-tf-surface-2 h-96 rounded-xl border border-tf-border" />
+            <div className="lg:col-span-3 bg-tf-surface-2 h-96 rounded-xl border border-tf-border" />
+          </div>
+        </div>
+      ) : data ? (
+        <div className={`space-y-6 transition-opacity duration-200 ${isFetching ? "opacity-60" : ""}`}>
+          {/* KPI Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-tf-surface rounded-xl border border-tf-border p-6 shadow-sm">
           <div className="flex items-center justify-between mb-4">
             <h3 className="tf-h4 text-tf-text-secondary">Total Revenue</h3>
@@ -287,7 +275,8 @@ export default function ReportsPage() {
           </div>
         )}
       </div>
-      </div>
+    </div>
+  ) : null}
     </div>
   );
 }
