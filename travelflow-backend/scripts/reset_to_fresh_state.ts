@@ -1,6 +1,9 @@
 import { prisma } from "../src/lib/prisma";
 
 async function resetToFreshState() {
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("DANGER: reset_to_fresh_state cannot be run in a production environment!");
+  }
   console.log("═══════════════════════════════════════════════════════════════════════════");
   console.log("  RESETTING APPLICATION TO FRESH INITIAL SETUP STATE");
   console.log("═══════════════════════════════════════════════════════════════════════════\n");

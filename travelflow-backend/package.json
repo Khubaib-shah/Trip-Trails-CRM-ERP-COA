@@ -9,7 +9,8 @@
     "dev": "nodemon src/server.ts",
     "build": "tsc",
     "lint": "eslint . --ext .ts",
-    "seed": "npx tsx prisma/seed.ts"
+    "seed": "npx tsx prisma/seed.ts",
+    "test": "npx tsx tests/run_all.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.14.0",

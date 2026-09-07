@@ -1,3 +1,12 @@
+/**
+ * proxy.ts — Edge Authentication Middleware (Parked)
+ *
+ * NOTE: In Next.js App Router, this middleware can be activated by renaming this file
+ * to `middleware.ts` (exporting default or `middleware`). It inspects HttpOnly JWT cookies
+ * (`tf_access_token`, `tf_refresh_token`) and manages redirects between /login and /dashboard.
+ * It is currently parked as `proxy.ts` during local testing to prevent automatic Edge redirects.
+ */
+
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 

@@ -1,0 +1,53 @@
+# ==========================================
+# Root .gitignore for TravelFlow Monorepo
+# ==========================================
+
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build outputs & caches
+dist/
+build/
+.next/
+out/
+*.tsbuildinfo
+.eslintcache
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Scratch & Temporary Developer Scripts
+**/scratch/
+scratch/
+test_out.txt
+*.tmp
+*.bak
+*.swp
+
+# Database backups & dumps
+*.dump
+travelflow-backend/backups/
+travelflow-backend/data/
+!travelflow-backend/scripts/db/*.sql
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# OS & IDE metadata
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
