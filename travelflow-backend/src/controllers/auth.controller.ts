@@ -55,8 +55,11 @@ export async function refreshToken(req: Request, res: Response) {
   }
 }
 
+import { invalidateUserSession } from "../middleware/auth.middleware";
+
 export async function logout(req: Request, res: Response) {
   const token = req.cookies?.tf_access_token as string | undefined;
+  invalidateUserSession(token);
   await authService.logout(token);
   clearAuthCookies(res);
   ApiResponse.success(res, null, "Logged out successfully");

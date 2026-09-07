@@ -65,7 +65,7 @@ export function UserMenu() {
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuItem asChild className="normal-case tracking-normal">
-          <Link href="/settings" className="flex items-center gap-2">
+          <Link href="/settings" prefetch={false} className="flex items-center gap-2">
             <Settings className="h-4 w-4" />
             <span>Account Settings</span>
           </Link>

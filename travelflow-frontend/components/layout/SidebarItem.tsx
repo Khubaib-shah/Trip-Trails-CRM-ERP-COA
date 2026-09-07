@@ -24,6 +24,7 @@ export function SidebarItem({ item, isOpen }: SidebarItemProps) {
   const link = (
     <Link
       href={item.href}
+      prefetch={false}
       className={`group relative flex items-center ${isOpen ? "gap-3 px-3 py-2.5" : "justify-center py-2.5 px-0"} rounded-lg transition-all duration-200 ease-out hover:bg-tf-surface-2 ${isActive && isOpen
           ? "bg-[var(--tf-sidebar-active)] text-[var(--tf-sidebar-active-text)] font-semibold border-l-[3px] border-[var(--tf-sidebar-accent)] rounded-l-none pl-[9px]"
           : isActive && !isOpen

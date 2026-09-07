@@ -16,7 +16,23 @@ describe("P0.5 — Duplicate Invoice Prevention & Cancellation Reversal", () => 
       callerId,
       isSuperAdmin: false,
     };
+    let customer = await prisma.customer.findFirst({ where: { agencyId: AGENCY_ID } });
+    if (!customer) {
+      const branch = await prisma.branch.findFirst({ where: { agencyId: AGENCY_ID } });
+      customer = await prisma.customer.create({
+        data: {
+          agencyId: AGENCY_ID,
+          branchId: branch?.id || user!.branchId!,
+          customerRef: "CUS-TEST05",
+          type: "individual",
+          firstName: "Test",
+          lastName: "Customer",
+          phone: "+971501234567",
+        },
+      });
+    }
     expect(user).toBeDefined();
+    expect(customer).toBeDefined();
   });
   it("prevents duplicate active invoices for the same booking (409 Conflict)", async () => {
     const customer = await prisma.customer.findFirst({ where: { agencyId: AGENCY_ID } });

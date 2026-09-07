@@ -22,6 +22,7 @@ export function Breadcrumbs() {
     <nav className="flex items-center text-[13px] text-tf-text-muted font-medium">
       <Link
         href="/dashboard"
+        prefetch={false}
         className="hover:text-tf-primary transition-colors"
       >
         Dashboard
@@ -43,6 +44,7 @@ export function Breadcrumbs() {
             ) : (
               <Link
                 href={href}
+                prefetch={false}
                 className="hover:text-tf-primary transition-colors"
               >
                 {formattedPath}

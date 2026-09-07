@@ -64,14 +64,33 @@ describe("P0.4 — Quantity / Price Model Single Source of Truth", () => {
     expect(fin5.customerTotal).toBe(1787.5);
   });
 
+async function getOrCreateCustomer() {
+  let customer = await prisma.customer.findFirst({ where: { agencyId: AGENCY_ID } });
+  if (!customer) {
+    const branch = await prisma.branch.findFirst({ where: { agencyId: AGENCY_ID } });
+    customer = await prisma.customer.create({
+      data: {
+        agencyId: AGENCY_ID,
+        branchId: branch?.id || "11111111-1111-1111-1111-111111111101",
+        customerRef: "CUS-TEST04",
+        type: "individual",
+        firstName: "Test",
+        lastName: "Customer",
+        phone: "+971501234567",
+      },
+    });
+  }
+  return customer;
+}
+
   it("createBooking with 2 pax saves full line totals and generates accurate invoice", async () => {
-    const customer = await prisma.customer.findFirst({ where: { agencyId: AGENCY_ID } });
+    const customer = await getOrCreateCustomer();
     const branch = await prisma.branch.findFirst({ where: { agencyId: AGENCY_ID, isHeadOffice: true } });
 
     const booking = await createBooking(
       ctx,
       {
-        customerId: customer!.id,
+        customerId: customer.id,
         branchId: branch!.id,
         title: "2 Pax Umrah Package",
         departureDate: new Date(),
@@ -117,14 +136,14 @@ describe("P0.4 — Quantity / Price Model Single Source of Truth", () => {
   });
 
   it("updateBooking correctly recalculates financials when quantity changes", async () => {
-    const customer = await prisma.customer.findFirst({ where: { agencyId: AGENCY_ID } });
+    const customer = await getOrCreateCustomer();
     const branch = await prisma.branch.findFirst({ where: { agencyId: AGENCY_ID, isHeadOffice: true } });
 
     // Initial booking with qty 1
     const booking = await createBooking(
       ctx,
       {
-        customerId: customer!.id,
+        customerId: customer.id,
         branchId: branch!.id,
         title: "Flight Booking",
         departureDate: new Date(),
@@ -178,7 +197,7 @@ describe("P0.4 — Quantity / Price Model Single Source of Truth", () => {
   });
 
   it("convertQuotationToBooking produces identical financial output for multi-quantity items", async () => {
-    const customer = await prisma.customer.findFirst({ where: { agencyId: AGENCY_ID } });
+    const customer = await getOrCreateCustomer();
     const branch = await prisma.branch.findFirst({ where: { agencyId: AGENCY_ID, isHeadOffice: true } });
     const quotationRef = await generateRef("QT", AGENCY_ID);
 
@@ -188,7 +207,7 @@ describe("P0.4 — Quantity / Price Model Single Source of Truth", () => {
         agencyId: AGENCY_ID,
         branchId: branch!.id,
         quotationNumber: quotationRef,
-        customerId: customer!.id,
+        customerId: customer.id,
         consultantId: ctx.callerId,
         title: "Family Vacation Quote",
         travelType: "leisure",

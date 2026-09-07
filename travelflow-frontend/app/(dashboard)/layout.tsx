@@ -86,19 +86,19 @@ export default function DashboardLayout({
           <div className="pt-8 border-t border-tf-border text-left">
             <h3 className="text-sm font-semibold text-tf-text-secondary uppercase tracking-wider mb-4">Quick Links</h3>
             <div className="grid grid-cols-2 gap-3">
-              <Link href="/leads" className="flex items-center p-3 rounded-xl border border-tf-border bg-tf-surface hover:bg-tf-surface-hover transition-colors group">
+              <Link href="/leads" prefetch={false} className="flex items-center p-3 rounded-xl border border-tf-border bg-tf-surface hover:bg-tf-surface-hover transition-colors group">
                 <Target className="w-5 h-5 text-tf-primary mr-3" />
                 <span className="text-sm font-medium text-tf-text-primary group-hover:text-tf-primary transition-colors">Leads</span>
               </Link>
-              <Link href="/customers" className="flex items-center p-3 rounded-xl border border-tf-border bg-tf-surface hover:bg-tf-surface-hover transition-colors group">
+              <Link href="/customers" prefetch={false} className="flex items-center p-3 rounded-xl border border-tf-border bg-tf-surface hover:bg-tf-surface-hover transition-colors group">
                 <Users className="w-5 h-5 text-tf-primary mr-3" />
                 <span className="text-sm font-medium text-tf-text-primary group-hover:text-tf-primary transition-colors">Customers</span>
               </Link>
-              <Link href="/quotations" className="flex items-center p-3 rounded-xl border border-tf-border bg-tf-surface hover:bg-tf-surface-hover transition-colors group">
+              <Link href="/quotations" prefetch={false} className="flex items-center p-3 rounded-xl border border-tf-border bg-tf-surface hover:bg-tf-surface-hover transition-colors group">
                 <FileText className="w-5 h-5 text-tf-primary mr-3" />
                 <span className="text-sm font-medium text-tf-text-primary group-hover:text-tf-primary transition-colors">Quotations</span>
               </Link>
-              <Link href="/bookings" className="flex items-center p-3 rounded-xl border border-tf-border bg-tf-surface hover:bg-tf-surface-hover transition-colors group">
+              <Link href="/bookings" prefetch={false} className="flex items-center p-3 rounded-xl border border-tf-border bg-tf-surface hover:bg-tf-surface-hover transition-colors group">
                 <Calendar className="w-5 h-5 text-tf-primary mr-3" />
                 <span className="text-sm font-medium text-tf-text-primary group-hover:text-tf-primary transition-colors">Bookings</span>
               </Link>

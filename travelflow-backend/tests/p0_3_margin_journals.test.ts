@@ -17,7 +17,23 @@ describe("P0.3 — Zero / Negative Margin Invoice Balancing", () => {
       callerId,
       isSuperAdmin: false,
     };
+    let customer = await prisma.customer.findFirst({ where: { agencyId: AGENCY_ID } });
+    if (!customer) {
+      const branch = await prisma.branch.findFirst({ where: { agencyId: AGENCY_ID } });
+      customer = await prisma.customer.create({
+        data: {
+          agencyId: AGENCY_ID,
+          branchId: branch?.id || user!.branchId!,
+          customerRef: "CUS-TEST01",
+          type: "individual",
+          firstName: "Test",
+          lastName: "Customer",
+          phone: "+971501234567",
+        },
+      });
+    }
     expect(user).toBeDefined();
+    expect(customer).toBeDefined();
   });
   it("Positive Margin: correctly credits revenue and VAT with Debits == Credits", async () => {
     // Setup test booking and invoice

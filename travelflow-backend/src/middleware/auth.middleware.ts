@@ -3,6 +3,23 @@ import { prisma } from "../lib/prisma";
 import { ApiError } from "../utils/ApiError";
 import { verifyToken } from "../utils/jwt";
 
+interface CachedSession {
+  user: any;
+  agencyId: string;
+  expiresAt: number;
+}
+
+// In-memory cache for validated sessions (60s TTL) to prevent 2 DB roundtrips on every HTTP request
+const sessionCache = new Map<string, CachedSession>();
+const revokedTokens = new Set<string>();
+
+export function invalidateUserSession(token?: string) {
+  if (token) {
+    sessionCache.delete(token);
+    revokedTokens.add(token);
+  }
+}
+
 export async function authMiddleware(req: Request, _res: Response, next: NextFunction) {
   try {
     const token = req.cookies?.tf_access_token as string | undefined;
@@ -11,8 +28,25 @@ export async function authMiddleware(req: Request, _res: Response, next: NextFun
       throw ApiError.unauthorized("Authentication required");
     }
 
+    if (revokedTokens.has(token)) {
+      throw ApiError.unauthorized("Token has been revoked");
+    }
+
+    // Check in-memory cache first
+    const cached = sessionCache.get(token);
+    const now = Date.now();
+    if (cached && cached.expiresAt > now) {
+      (req as any).user = cached.user;
+      req.agencyId = cached.agencyId;
+      console.log(`[AUTH] Cache HIT (${Date.now() - now}ms) for ${cached.user.email}`);
+      return next();
+    }
+    const dbStart = Date.now();
+
     const isBlacklisted = await prisma.tokenBlacklist.findUnique({ where: { token } });
     if (isBlacklisted) {
+      revokedTokens.add(token);
+      sessionCache.delete(token);
       throw ApiError.unauthorized("Token has been revoked");
     }
 
@@ -42,6 +76,15 @@ export async function authMiddleware(req: Request, _res: Response, next: NextFun
     if (!user) {
       throw ApiError.unauthorized("Invalid or expired token");
     }
+
+    // Cache session for 60 seconds (or until token expiry)
+    sessionCache.set(token, {
+      user,
+      agencyId: user.agencyId,
+      expiresAt: now + 60_000,
+    });
+
+    console.log(`[AUTH] DB lookup took ${Date.now() - dbStart}ms for ${user.email}`);
 
     (req as any).user = user;
     req.agencyId = user.agencyId;

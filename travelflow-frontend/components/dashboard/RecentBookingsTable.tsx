@@ -132,6 +132,7 @@ export function RecentBookingsTable({
         </div>
         <Link
           href="/bookings"
+          prefetch={false}
           className="flex items-center gap-1.5 text-sm font-medium text-tf-primary hover:text-[var(--tf-primary-hover)] transition-colors group"
         >
           View All

@@ -154,6 +154,23 @@ async function main() {
     }
   });
 
+  console.log("Creating Sample Customer...");
+  await prisma.customer.create({
+    data: {
+      id: "44444444-4444-4444-4444-444444444401",
+      agencyId: AGENCY_ID,
+      branchId: BRANCH_ID,
+      customerRef: "CUS-000001",
+      type: "individual",
+      firstName: "Ahmed",
+      lastName: "Khan",
+      email: "ahmed.khan@example.com",
+      phone: "+971501234567",
+      city: "Dubai",
+      country: "United Arab Emirates",
+    }
+  });
+
   console.log("Creating Chart of Accounts...");
   for (const acc of coaTemplate) {
     await prisma.chartOfAccount.create({
