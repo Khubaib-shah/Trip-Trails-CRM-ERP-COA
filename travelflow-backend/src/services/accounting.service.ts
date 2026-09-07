@@ -1205,7 +1205,7 @@ export async function postExpenseJournal(
 
   let expenseAccountId = expense.accountId;
   if (!expenseAccountId) {
-    const defaultAcc = await mapping.getExpenseAccountForCategory(ctx.agencyId, expense.category);
+    const defaultAcc = await mapping.getExpenseAccountForCategory(ctx.agencyId, expense.branchId, expense.category);
     expenseAccountId = defaultAcc.id;
     await prisma.expense.update({
       where: { id: expenseId },
@@ -1216,7 +1216,7 @@ export async function postExpenseJournal(
   // Dr Expense account or Prepaid Asset
   let debitAccountId = expenseAccountId;
   if (prepaidOptions?.isPrepaid) {
-    const prepaidAsset = await mapping.getPrepaidAssetAccount(ctx.agencyId, expense.category);
+    const prepaidAsset = await mapping.getPrepaidAssetAccount(ctx.agencyId, expense.branchId, expense.category);
     debitAccountId = prepaidAsset.id;
   }
 

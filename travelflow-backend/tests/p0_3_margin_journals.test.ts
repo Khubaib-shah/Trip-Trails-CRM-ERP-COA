@@ -5,14 +5,20 @@ import * as mapping from "../src/services/accounting-mapping.service";
 import { generateRef } from "../src/utils/refGenerator";
 
 const AGENCY_ID = "a1000000-0000-0000-0000-000000000001";
-const ctx = {
-  agencyId: AGENCY_ID,
-  callerRole: "admin",
-  callerId: "22222222-2222-2222-2222-222222222203",
-  isSuperAdmin: false,
-};
+let ctx: any;
 
 describe("P0.3 — Zero / Negative Margin Invoice Balancing", () => {
+  it("setup test context", async () => {
+    const user = await prisma.user.findFirst({ where: { agencyId: AGENCY_ID } });
+    const callerId = user?.id || "22222222-2222-2222-2222-222222222201";
+    ctx = {
+      agencyId: AGENCY_ID,
+      callerRole: "admin",
+      callerId,
+      isSuperAdmin: false,
+    };
+    expect(user).toBeDefined();
+  });
   it("Positive Margin: correctly credits revenue and VAT with Debits == Credits", async () => {
     // Setup test booking and invoice
     const customer = await prisma.customer.findFirst({ where: { agencyId: AGENCY_ID } });
@@ -241,8 +247,9 @@ describe("P0.3 — Zero / Negative Margin Invoice Balancing", () => {
 });
 
 async function run() {
-  await printSuiteSummary();
+  const ok = await printSuiteSummary();
   await prisma.$disconnect();
+  process.exit(ok ? 0 : 1);
 }
 
 run();

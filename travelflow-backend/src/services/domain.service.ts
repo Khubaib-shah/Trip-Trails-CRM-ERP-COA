@@ -2222,14 +2222,14 @@ export async function createExpense(
   // Resolve accountId
   let accountId = values.accountId;
   if (!accountId) {
-    const defaultAcc = await mapping.getExpenseAccountForCategory(agencyId, values.category);
+    const defaultAcc = await mapping.getExpenseAccountForCategory(agencyId, branchId, values.category);
     accountId = defaultAcc.id;
   }
 
   // Resolve paymentAccountId (honoring actual selected cash/bank account if provided)
   let paymentAccountId = values.paymentAccountId;
   if (!paymentAccountId) {
-    const defaultBank = await mapping.getBankOrCashAccount(agencyId, "11111111-1111-1111-1111-111111111101", {
+    const defaultBank = await mapping.getBankOrCashAccount(agencyId, branchId, {
       paymentMethod: values.paymentMethod,
     });
     paymentAccountId = defaultBank.id;

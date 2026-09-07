@@ -97,12 +97,12 @@ async function main() {
   await prisma.fiscalPeriod.deleteMany();
   await prisma.chartOfAccount.deleteMany();
   await prisma.counter.deleteMany();
-  
+
   await prisma.paymentAllocation.deleteMany();
   await prisma.customerPayment.deleteMany();
   await prisma.supplierPaymentAllocation.deleteMany();
   await prisma.supplierPayment.deleteMany();
-  
+
   await prisma.invoiceLine.deleteMany();
   await prisma.invoice.deleteMany();
   await prisma.bookingService.deleteMany();
@@ -111,7 +111,7 @@ async function main() {
   await prisma.quotation.deleteMany();
   await prisma.leadActivity.deleteMany();
   await prisma.lead.deleteMany();
-  
+
   await prisma.customer.deleteMany();
   await prisma.supplier.deleteMany();
   await prisma.expense.deleteMany();
@@ -131,7 +131,7 @@ async function main() {
 
   console.log("Creating 1 Branch...");
   await prisma.branch.create({
-    data: { id: BRANCH_ID, agencyId: AGENCY_ID, name: "Lahore Head Office", code: "LHE", city: "Lahore", currency: "PKR", isHeadOffice: true }
+    data: { id: BRANCH_ID, agencyId: AGENCY_ID, name: "Dubai Head Office ", code: "DHO", city: "Dubai", currency: "AED", isHeadOffice: true }
   });
 
   console.log("Creating Roles...");

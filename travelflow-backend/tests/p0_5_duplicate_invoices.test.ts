@@ -4,14 +4,20 @@ import { createBooking } from "../src/services/domain.service";
 import { generateInvoiceFromBooking, cancelInvoice } from "../src/services/invoice.service";
 
 const AGENCY_ID = "a1000000-0000-0000-0000-000000000001";
-const ctx = {
-  agencyId: AGENCY_ID,
-  callerRole: "admin",
-  callerId: "22222222-2222-2222-2222-222222222203",
-  isSuperAdmin: false,
-};
+let ctx: any;
 
 describe("P0.5 — Duplicate Invoice Prevention & Cancellation Reversal", () => {
+  it("setup test context", async () => {
+    const user = await prisma.user.findFirst({ where: { agencyId: AGENCY_ID } });
+    const callerId = user?.id || "22222222-2222-2222-2222-222222222201";
+    ctx = {
+      agencyId: AGENCY_ID,
+      callerRole: "admin",
+      callerId,
+      isSuperAdmin: false,
+    };
+    expect(user).toBeDefined();
+  });
   it("prevents duplicate active invoices for the same booking (409 Conflict)", async () => {
     const customer = await prisma.customer.findFirst({ where: { agencyId: AGENCY_ID } });
     const branch = await prisma.branch.findFirst({ where: { agencyId: AGENCY_ID, isHeadOffice: true } });
@@ -128,8 +134,9 @@ describe("P0.5 — Duplicate Invoice Prevention & Cancellation Reversal", () => 
 });
 
 async function run() {
-  await printSuiteSummary();
+  const ok = await printSuiteSummary();
   await prisma.$disconnect();
+  process.exit(ok ? 0 : 1);
 }
 
 run();

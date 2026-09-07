@@ -6,14 +6,25 @@ import * as mapping from "../src/services/accounting-mapping.service";
 
 const AGENCY_ID = "a1000000-0000-0000-0000-000000000001"; // TripTrails Travel & Tourism
 
-const ctx = {
-  agencyId: AGENCY_ID,
-  callerRole: "admin",
-  callerId: "22222222-2222-2222-2222-222222222203",
-  isSuperAdmin: false,
-};
+let ctx: any;
+let branch: any;
 
 describe("P0.2 — Expense Accounting & Audit Trail", () => {
+  it("setup test context", async () => {
+    const user = await prisma.user.findFirst({ where: { agencyId: AGENCY_ID } });
+    branch = await prisma.branch.findFirst({ where: { agencyId: AGENCY_ID, isHeadOffice: true } })
+      || await prisma.branch.findFirst({ where: { agencyId: AGENCY_ID } });
+    const callerId = user?.id || "22222222-2222-2222-2222-222222222201";
+
+    ctx = {
+      agencyId: AGENCY_ID,
+      callerRole: "admin",
+      callerId,
+      isSuperAdmin: false,
+    };
+    expect(user).toBeDefined();
+    expect(branch).toBeDefined();
+  });
   it("createExpense auto-resolves accountId and paymentAccountId and posts balanced journal", async () => {
     const expense = await createExpense(
       ctx,
@@ -67,8 +78,8 @@ describe("P0.2 — Expense Accounting & Audit Trail", () => {
   });
 
   it("createExpense with explicit accountId preserves custom account", async () => {
-    const itSoftwareAcc = await mapping.getAccountByCode(AGENCY_ID, "6220");
-    const pettyCashAcc = await mapping.getAccountByCode(AGENCY_ID, "1020");
+    const itSoftwareAcc = await mapping.getAccountByCode(AGENCY_ID, branch.id, "6220");
+    const pettyCashAcc = await mapping.getAccountByCode(AGENCY_ID, branch.id, "1020");
 
     const expense = await createExpense(
       ctx,
@@ -145,8 +156,9 @@ describe("P0.2 — Expense Accounting & Audit Trail", () => {
 });
 
 async function run() {
-  await printSuiteSummary();
+  const ok = await printSuiteSummary();
   await prisma.$disconnect();
+  process.exit(ok ? 0 : 1);
 }
 
 run();

@@ -82,15 +82,36 @@ export const ACCOUNT_CODES = {
 } as const;
 
 /**
- * Resolve an active account by its unique code within an agency.
+ * Resolve an active account by its unique code within an agency (optionally branch-scoped).
  */
-export async function getAccountByCode(agencyId: string, branchId: string, code: string) {
-  const account = await prisma.chartOfAccount.findFirst({
-    where: { agencyId, branchId, code, isActive: true },
-  });
+export async function getAccountByCode(agencyId: string, branchIdOrCode: string, code?: string) {
+  let branchId: string | undefined;
+  let actualCode = code;
+
+  // Handle case where caller passed (agencyId, code) directly
+  if (!actualCode) {
+    actualCode = branchIdOrCode;
+    branchId = undefined;
+  } else {
+    branchId = branchIdOrCode;
+  }
+
+  const where: any = { agencyId, code: actualCode, isActive: true };
+  if (branchId) {
+    where.branchId = branchId;
+  }
+
+  let account = await prisma.chartOfAccount.findFirst({ where });
+  if (!account && branchId) {
+    // Fallback: look for this account code across any branch in the agency
+    account = await prisma.chartOfAccount.findFirst({
+      where: { agencyId, code: actualCode, isActive: true },
+    });
+  }
+
   if (!account) {
     throw ApiError.badRequest(
-      `Account Code ${code} is not configured or is inactive. Please verify Chart of Accounts.`
+      `Account Code ${actualCode} is not configured or is inactive. Please verify Chart of Accounts.`
     );
   }
   return account;
@@ -278,8 +299,17 @@ export async function getBankOrCashAccount(
  * - insurance -> 1210 Prepaid Insurance
  * - other -> 1220 Other Prepaid Expenses
  */
-export async function getPrepaidAssetAccount(agencyId: string, branchId: string, category?: string) {
-  const cat = (category || "").toLowerCase();
+export async function getPrepaidAssetAccount(agencyId: string, branchIdOrCategory?: string, category?: string) {
+  let branchId: string | undefined;
+  let cat = "";
+
+  if (category === undefined) {
+    cat = (branchIdOrCategory || "").toLowerCase();
+  } else {
+    branchId = branchIdOrCategory;
+    cat = (category || "").toLowerCase();
+  }
+
   let code: string = ACCOUNT_CODES.PREPAID_OTHER;
   if (cat.includes("rent")) {
     code = ACCOUNT_CODES.PREPAID_RENT;
@@ -288,9 +318,9 @@ export async function getPrepaidAssetAccount(agencyId: string, branchId: string,
   }
 
   try {
-    return await getAccountByCode(agencyId, branchId, code);
+    return await getAccountByCode(agencyId, branchId || "", code);
   } catch {
-    return await getAccountByCode(agencyId, branchId, ACCOUNT_CODES.PREPAID_RENT);
+    return await getAccountByCode(agencyId, branchId || "", ACCOUNT_CODES.PREPAID_RENT);
   }
 }
 
@@ -313,54 +343,63 @@ export async function getPrepaidAssetAccount(agencyId: string, branchId: string,
  *   - visa expense / ticket expense-> 5000 Direct Cost (operational cost pass-through)
  *   - travel / other               -> 6900 General & Admin (fallback)
  */
-export async function getExpenseAccountForCategory(agencyId: string, branchId: string, category?: string) {
-  const cat = (category || "").toLowerCase().trim();
+export async function getExpenseAccountForCategory(agencyId: string, branchIdOrCategory?: string, category?: string) {
+  let branchId: string | undefined;
+  let catStr = "";
+
+  if (category === undefined) {
+    catStr = (branchIdOrCategory || "").toLowerCase().trim();
+  } else {
+    branchId = branchIdOrCategory;
+    catStr = (category || "").toLowerCase().trim();
+  }
+
   let code: string = ACCOUNT_CODES.GENERAL_ADMIN_OTHER;
 
-  if (cat.includes("salary") || cat.includes("payroll") || cat.includes("wage")) {
+  if (catStr.includes("salary") || catStr.includes("payroll") || catStr.includes("wage")) {
     code = ACCOUNT_CODES.SALARIES_WAGES_EXPENSE;
-  } else if (cat.includes("rent")) {
+  } else if (catStr.includes("rent")) {
     code = ACCOUNT_CODES.RENT_EXPENSE;
-  } else if (cat.includes("market") || cat.includes("advertis")) {
+  } else if (catStr.includes("market") || catStr.includes("advertis")) {
     code = ACCOUNT_CODES.MARKETING_ADVERTISING;
-  } else if (cat.includes("utilit") || cat.includes("electric") || cat.includes("water") || cat.includes("dewa")) {
+  } else if (catStr.includes("utilit") || catStr.includes("electric") || catStr.includes("water") || catStr.includes("dewa")) {
     code = ACCOUNT_CODES.UTILITIES_EXPENSE;
-  } else if (cat.includes("telephone") || cat.includes("mobile") || cat.includes("internet")) {
+  } else if (catStr.includes("telephone") || catStr.includes("mobile") || catStr.includes("internet")) {
     code = ACCOUNT_CODES.TELEPHONE_INTERNET;
-  } else if (cat.includes("printing") || cat.includes("stationery")) {
+  } else if (catStr.includes("printing") || catStr.includes("stationery")) {
     code = ACCOUNT_CODES.PRINTING_STATIONERY;
-  } else if (cat.includes("insurance")) {
+  } else if (catStr.includes("insurance")) {
     code = ACCOUNT_CODES.INSURANCE_EXPENSE;
-  } else if (cat.includes("commission") || cat.includes("agent")) {
+  } else if (catStr.includes("commission") || catStr.includes("agent")) {
     code = ACCOUNT_CODES.COMMISSION_PAID;
-  } else if (cat.includes("food") || cat.includes("refreshment") || cat.includes("welfare") || cat.includes("entertainment")) {
+  } else if (catStr.includes("food") || catStr.includes("refreshment") || catStr.includes("welfare") || catStr.includes("entertainment")) {
     code = ACCOUNT_CODES.STAFF_ENTERTAINMENT;
-  } else if (cat.includes("establishment") || cat.includes("license") || cat.includes("govt") || cat.includes("government")) {
+  } else if (catStr.includes("establishment") || catStr.includes("license") || catStr.includes("govt") || catStr.includes("government")) {
     code = ACCOUNT_CODES.LICENSE_GOVT_FEES;
-  } else if (cat.includes("office") && (cat.includes("suppl") || cat.includes("expense"))) {
+  } else if (catStr.includes("office") && (catStr.includes("suppl") || catStr.includes("expense"))) {
     code = ACCOUNT_CODES.OFFICE_SUPPLIES;
-  } else if (cat.includes("suppl") || cat.includes("station")) {
+  } else if (catStr.includes("suppl") || catStr.includes("station")) {
     code = ACCOUNT_CODES.OFFICE_SUPPLIES;
-  } else if (cat.includes("soft") || cat.includes("tech")) {
+  } else if (catStr.includes("soft") || catStr.includes("tech")) {
     code = ACCOUNT_CODES.IT_SOFTWARE;
-  } else if (cat.includes("visa expense") || cat.includes("saudi visa expense") || cat.includes("ticket")) {
+  } else if (catStr.includes("visa expense") || catStr.includes("saudi visa expense") || catStr.includes("ticket")) {
     code = ACCOUNT_CODES.COST_VARIANCE; // Direct cost pass-through for operational visa/ticket costs
-  } else if (cat.includes("fuel")) {
+  } else if (catStr.includes("fuel")) {
     code = ACCOUNT_CODES.GENERAL_ADMIN_OTHER;
-  } else if (cat.includes("travel")) {
+  } else if (catStr.includes("travel")) {
     code = ACCOUNT_CODES.GENERAL_ADMIN_OTHER;
-  } else if (cat.includes("bank") || cat.includes("charge")) {
+  } else if (catStr.includes("bank") || catStr.includes("charge")) {
     code = ACCOUNT_CODES.BANK_CHARGES;
-  } else if (cat.includes("legal") || cat.includes("professional")) {
+  } else if (catStr.includes("legal") || catStr.includes("professional")) {
     code = ACCOUNT_CODES.LEGAL_PROFESSIONAL;
-  } else if (cat.includes("depreciation")) {
+  } else if (catStr.includes("depreciation")) {
     code = ACCOUNT_CODES.DEPRECIATION_EXPENSE;
   }
 
   try {
-    return await getAccountByCode(agencyId, branchId, code);
+    return await getAccountByCode(agencyId, branchId || "", code);
   } catch {
-    return await getAccountByCode(agencyId, branchId, ACCOUNT_CODES.GENERAL_ADMIN_OTHER);
+    return await getAccountByCode(agencyId, branchId || "", ACCOUNT_CODES.GENERAL_ADMIN_OTHER);
   }
 }
 
