@@ -22,6 +22,8 @@ import {
 import { PhoneInput } from "@/components/ui/phone-input";
 
 import {
+  getDefaultTaxesForCurrency,
+  getQuotationDefaultValues,
   quotationDefaultValues,
   quotationSchema,
   quotationStatusOptions,
@@ -96,6 +98,11 @@ export function QuotationDrawer({
   const activeCurrency = useBranchStore(state => state.activeCurrency);
   const isViewMode = mode === "view";
 
+  const effectiveCurrency = initialValues?.currency || activeCurrency || "PKR";
+  const defaultTaxes = mode === "create" && (!initialValues?.taxes || initialValues.taxes.length === 0)
+    ? getDefaultTaxesForCurrency(effectiveCurrency)
+    : (initialValues?.taxes ?? quotationDefaultValues.taxes);
+
   const [newCustomer, setNewCustomer] = useState({
     name: "",
     phone: "",
@@ -116,7 +123,12 @@ export function QuotationDrawer({
 
   const form = useForm<QuotationFormValues>({
     resolver: zodResolver(quotationSchema),
-    defaultValues: { ...quotationDefaultValues, currency: activeCurrency, ...initialValues },
+    defaultValues: {
+      ...getQuotationDefaultValues(effectiveCurrency),
+      currency: effectiveCurrency,
+      ...initialValues,
+      taxes: defaultTaxes,
+    },
   });
 
   const {
@@ -148,7 +160,17 @@ export function QuotationDrawer({
 
   useEffect(() => {
     if (!isOpen) return;
-    form.reset({ ...quotationDefaultValues, ...initialValues });
+    const effCurr = initialValues?.currency || activeCurrency || "PKR";
+    const defTaxes = mode === "create" && (!initialValues?.taxes || initialValues.taxes.length === 0)
+      ? getDefaultTaxesForCurrency(effCurr)
+      : (initialValues?.taxes ?? quotationDefaultValues.taxes);
+
+    form.reset({
+      ...getQuotationDefaultValues(effCurr),
+      currency: effCurr,
+      ...initialValues,
+      taxes: defTaxes,
+    });
     // Pre-populate new customer fields when editing a quotation with deferred customer details
     if (initialValues?.customerName) {
       setNewCustomer({
@@ -330,61 +352,66 @@ export function QuotationDrawer({
               <h4 className="text-sm font-semibold text-tf-text-primary">
                 Trip Details
               </h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                <FormField
-                  control={form.control}
-                  name="destination"
-                  label="Destination"
-                  placeholder="e.g. Dubai, Saudia Arabia"
-                  required
-                  disabled={isViewMode}
-                />
-                <FormCombobox
-                  control={form.control}
-                  name="travelType"
-                  label="Travel Type"
-                  required
-                  options={[
-                    { label: "Visa", value: "visa" },
-                    { label: "Holiday Package", value: "holiday_package" },
-                    { label: "Honey Moon", value: "honey moon" },
-                    { label: "Umrah", value: "umrah" },
-                    { label: "Hajj", value: "hajj" },
-                    { label: "Flight", value: "flight" },
-                    { label: "Hotel", value: "hotel" },
-                    { label: "Corporate", value: "corporate" },
-                    { label: "Custom", value: "custom" },
-                  ]}
-                  disabled={isViewMode}
-                />
-                <FormField
-                  control={form.control}
-                  name="validUntil"
-                  label="Valid Until"
-                  type="date"
-                  disabled={isViewMode}
-                />
-                <FormField
-                  control={form.control}
-                  name="adults"
-                  label="Adults"
-                  type="number"
-                  disabled={isViewMode}
-                />
-                <FormField
-                  control={form.control}
-                  name="children"
-                  label="Children"
-                  type="number"
-                  disabled={isViewMode}
-                />
-                <FormField
-                  control={form.control}
-                  name="infants"
-                  label="Infants"
-                  type="number"
-                  disabled={isViewMode}
-                />
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="destination"
+                    label="Destination"
+                    placeholder="e.g. Dubai, Saudia Arabia"
+                    required
+                    disabled={isViewMode}
+                  />
+                  <FormCombobox
+                    control={form.control}
+                    name="travelType"
+                    label="Travel Type"
+                    required
+                    options={[
+                      { label: "Visa", value: "visa" },
+                      { label: "Holiday Package", value: "holiday_package" },
+                      { label: "Honey Moon", value: "honey moon" },
+                      { label: "Umrah", value: "umrah" },
+                      { label: "Hajj", value: "hajj" },
+                      { label: "Flight", value: "flight" },
+                      { label: "Hotel", value: "hotel" },
+                      { label: "Corporate", value: "corporate" },
+                      { label: "Custom", value: "custom" },
+                    ]}
+                    disabled={isViewMode}
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="validUntil"
+                    label="Valid Until"
+                    type="date"
+                    disabled={isViewMode}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="adults"
+                    label="Adults"
+                    type="number"
+                    disabled={isViewMode}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="children"
+                    label="Children"
+                    type="number"
+                    disabled={isViewMode}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="infants"
+                    label="Infants"
+                    type="number"
+                    disabled={isViewMode}
+                  />
+                </div>
               </div>
             </div>
 
@@ -593,7 +620,7 @@ export function QuotationDrawer({
                       id: undefined,
                       label: "VAT",
                       taxType: "percentage",
-                      value: 0,
+                      value: currentCurrency === "AED" ? 5 : 0,
                     })
                   }
                 >

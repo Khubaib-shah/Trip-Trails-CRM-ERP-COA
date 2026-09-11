@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useForm, useFieldArray, useWatch } from "react-hook-form";
 import { zodResolver } from "@/lib/zod-resolver";
 import { showSuccess, showError } from "@/lib/toast-utils";
@@ -21,6 +21,8 @@ import {
 import { PhoneInput } from "@/components/ui/phone-input";
 
 import {
+  getDefaultTaxesForCurrency,
+  getQuotationDefaultValues,
   quotationDefaultValues,
   quotationSchema,
   quotationStatusOptions,
@@ -75,6 +77,11 @@ export function QuotationForm({
   const isViewMode = mode === "view";
   const isEditing = mode === "edit";
 
+  const effectiveCurrency = initialValues?.currency || activeCurrency || "PKR";
+  const defaultTaxes = mode === "create" && (!initialValues?.taxes || initialValues.taxes.length === 0)
+    ? getDefaultTaxesForCurrency(effectiveCurrency)
+    : (initialValues?.taxes ?? quotationDefaultValues.taxes);
+
   const [newCustomer, setNewCustomer] = useState({
     name: "",
     phone: "",
@@ -93,7 +100,12 @@ export function QuotationForm({
 
   const form = useForm<QuotationFormValues>({
     resolver: zodResolver(quotationSchema),
-    defaultValues: { ...quotationDefaultValues, ...initialValues },
+    defaultValues: {
+      ...getQuotationDefaultValues(effectiveCurrency),
+      ...initialValues,
+      currency: effectiveCurrency,
+      taxes: defaultTaxes,
+    },
   });
 
   const {
@@ -183,7 +195,7 @@ export function QuotationForm({
   };
 
   return (
-    <div className=" space-y-6">
+    <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <Button variant="outline" size="icon" onClick={() => router.back()}>
@@ -244,7 +256,7 @@ export function QuotationForm({
                     <h4 className="text-sm font-semibold text-tf-text-primary">
                       New Customer Details
                     </h4>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       <div className="space-y-2">
                         <div className="text-sm font-medium text-tf-text-secondary">Customer Name <span className="text-tf-danger">*</span></div>
                         <Input
@@ -284,73 +296,78 @@ export function QuotationForm({
                   </div>
                 )}
 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  <FormField
-                    control={form.control}
-                    name="destination"
-                    label="Destination"
-                    placeholder="e.g. Dubai, Saudia Arabia"
-                    required
-                    disabled={isViewMode}
-                  />
-                  <FormCombobox
-                    control={form.control}
-                    name="travelType"
-                    label="Travel Type"
-                    required
-                    options={[
-                      { label: "Visa", value: "visa" },
-                      { label: "Holiday Package", value: "holiday_package" },
-                      { label: "Honey Moon", value: "honey moon" },
-                      { label: "Umrah", value: "umrah" },
-                      { label: "Hajj", value: "hajj" },
-                      { label: "Flight", value: "flight" },
-                      { label: "Hotel", value: "hotel" },
-                      { label: "Corporate", value: "corporate" },
-                      { label: "Custom", value: "custom" },
-                    ]}
-                    disabled={isViewMode}
-                  />
-                  <FormSelect
-                    control={form.control}
-                    name="currency"
-                    label="Currency"
-                    required
-                    options={[
-                      { label: "PKR (Pakistani Rupee)", value: "PKR" },
-                      { label: "AED (UAE Dirham)", value: "AED" },
-                      ...(activeCurrency !== "PKR" && activeCurrency !== "AED" ? [{ label: activeCurrency, value: activeCurrency }] : [])
-                    ]}
-                    disabled={isViewMode}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="validUntil"
-                    label="Valid Until"
-                    type="date"
-                    disabled={isViewMode}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="adults"
-                    label="Adults"
-                    type="number"
-                    disabled={isViewMode}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="children"
-                    label="Children"
-                    type="number"
-                    disabled={isViewMode}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="infants"
-                    label="Infants"
-                    type="number"
-                    disabled={isViewMode}
-                  />
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="destination"
+                      label="Destination"
+                      placeholder="e.g. Dubai, Saudia Arabia"
+                      required
+                      disabled={isViewMode}
+                    />
+                    <FormCombobox
+                      control={form.control}
+                      name="travelType"
+                      label="Travel Type"
+                      required
+                      options={[
+                        { label: "Visa", value: "visa" },
+                        { label: "Holiday Package", value: "holiday_package" },
+                        { label: "Honey Moon", value: "honey moon" },
+                        { label: "Umrah", value: "umrah" },
+                        { label: "Hajj", value: "hajj" },
+                        { label: "Flight", value: "flight" },
+                        { label: "Hotel", value: "hotel" },
+                        { label: "Corporate", value: "corporate" },
+                        { label: "Custom", value: "custom" },
+                      ]}
+                      disabled={isViewMode}
+                    />
+                    <FormSelect
+                      control={form.control}
+                      name="currency"
+                      label="Currency"
+                      required
+                      options={[
+                        { label: "PKR (Pakistani Rupee)", value: "PKR" },
+                        { label: "AED (UAE Dirham)", value: "AED" },
+                        ...(activeCurrency !== "PKR" && activeCurrency !== "AED" ? [{ label: activeCurrency, value: activeCurrency }] : [])
+                      ]}
+                      disabled={isViewMode}
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="validUntil"
+                      label="Valid Until"
+                      type="date"
+                      disabled={isViewMode}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="adults"
+                      label="Adults"
+                      type="number"
+                      disabled={isViewMode}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="children"
+                      label="Children"
+                      type="number"
+                      disabled={isViewMode}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="infants"
+                      label="Infants"
+                      type="number"
+                      disabled={isViewMode}
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -562,7 +579,7 @@ export function QuotationForm({
                           id: undefined,
                           label: "VAT",
                           taxType: "percentage",
-                          value: 0,
+                          value: currentCurrency === "AED" ? 5 : 0,
                         })
                       }
                     >
@@ -642,9 +659,9 @@ export function QuotationForm({
             </div>
 
             {/* RIGHT COLUMN: Summary & Actions */}
-            <div className="lg:col-span-1 space-y-6">
+            <div className="lg:col-span-1">
 
-              <div className="bg-tf-surface border border-tf-border rounded-xl p-6 shadow-sm sticky top-6">
+              <div className="bg-tf-surface border border-tf-border rounded-xl p-6 shadow-sm sticky top-0">
                 <h3 className="text-lg font-semibold text-tf-text-primary border-b border-tf-border pb-3 mb-4">
                   Quotation Summary
                 </h3>

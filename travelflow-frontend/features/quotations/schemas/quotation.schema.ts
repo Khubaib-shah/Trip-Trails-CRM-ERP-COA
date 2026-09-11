@@ -152,3 +152,27 @@ export const quotationDefaultValues: QuotationFormValues = {
   attachments: [],
   revisionBaseVersionId: undefined,
 };
+
+export function getDefaultTaxesForCurrency(currency?: string) {
+  if (currency === "AED") {
+    return [
+      {
+        id: undefined,
+        label: "VAT",
+        taxType: "percentage" as const,
+        value: 5,
+      },
+    ];
+  }
+  return [];
+}
+
+export function getQuotationDefaultValues(currency?: string): QuotationFormValues {
+  const isAED = currency === "AED";
+  return {
+    ...quotationDefaultValues,
+    currency: isAED ? "AED" : "PKR",
+    taxes: getDefaultTaxesForCurrency(currency),
+  };
+}
+

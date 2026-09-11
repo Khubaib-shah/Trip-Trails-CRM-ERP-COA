@@ -7,9 +7,12 @@ import { useCustomers } from "@/features/customers/hooks/queries";
 import { useBranches, useAgents } from "@/features/shared/hooks/queries";
 import { useLead } from "@/features/leads/hooks/queries";
 
+import { useBranchStore } from "@/store/branch.store";
+
 function CreateQuotationContent() {
   const searchParams = useSearchParams();
   const leadId = searchParams?.get("leadId");
+  const { activeBranchId, activeCurrency } = useBranchStore();
 
   const { data: lead, isLoading: isLeadLoading } = useLead(leadId);
   const { data: customers = [], isLoading: isCustomersLoading } = useCustomers();
@@ -25,6 +28,9 @@ function CreateQuotationContent() {
       </div>
     );
   }
+
+  const selectedBranch = branches.find((b) => b.id === activeBranchId) || branches[0];
+  const currency = selectedBranch?.currency || activeCurrency || "PKR";
 
   let defaultCustomerId = customers[0]?.id ?? "";
   let customerName = "";
@@ -46,7 +52,7 @@ function CreateQuotationContent() {
       customerEmail = lead.email || "";
       customerPhone = lead.phone || "";
     }
-    
+
     if (lead.destination) destination = lead.destination;
     if (lead.adults) adults = lead.adults;
     if (lead.children) children = lead.children;
@@ -54,7 +60,7 @@ function CreateQuotationContent() {
 
   const initialValues = {
     customerId: defaultCustomerId,
-    branchId: branches[0]?.id,
+    branchId: selectedBranch?.id,
     agentId: agents[0]?.id,
     leadId: lead?.id,
     customerName,
@@ -65,11 +71,12 @@ function CreateQuotationContent() {
     children,
     infants,
     travelType,
+    currency,
   };
 
   return (
-    <QuotationForm 
-      mode="create" 
+    <QuotationForm
+      mode="create"
       initialValues={initialValues}
       customers={customers}
       branches={branches}
@@ -80,14 +87,12 @@ function CreateQuotationContent() {
 
 export default function CreateQuotationPage() {
   return (
-    <div className="container mx-auto py-6">
-      <Suspense fallback={
-        <div className="flex h-64 items-center justify-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-tf-primary"></div>
-        </div>
-      }>
-        <CreateQuotationContent />
-      </Suspense>
-    </div>
+    <Suspense fallback={
+      <div className="flex h-64 items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-tf-primary"></div>
+      </div>
+    }>
+      <CreateQuotationContent />
+    </Suspense>
   );
 }
