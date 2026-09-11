@@ -383,99 +383,122 @@ export function QuotationForm({
                   {itemFields.map((field, index) => (
                     <div
                       key={field.id}
-                      className="grid grid-cols-1 md:grid-cols-12 gap-3 items-start bg-tf-surface-2 p-4 rounded-lg border border-tf-border relative"
+                      className="space-y-3 bg-tf-surface-2 p-4 rounded-lg border border-tf-border relative"
                     >
-                      <div className="md:col-span-3 space-y-3">
-                        <FormCombobox
-                          control={form.control}
-                          name={`items.${index}.serviceCategory` as const}
-                          label="Category"
-                          options={[
-                            { label: "Flight", value: "flight" },
-                            { label: "Hotel", value: "hotel" },
-                            { label: "Transfer", value: "transfer" },
-                            { label: "Insurance", value: "insurance" },
-                            { label: "Visa", value: "visa" },
-                            { label: "Activity", value: "activity" },
-                            { label: "Other", value: "other" },
-                          ]}
-                          required
-                          disabled={isViewMode}
-                        />
+                      <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-start">
+                        <div className="md:col-span-3 space-y-3">
+                          <FormCombobox
+                            control={form.control}
+                            name={`items.${index}.serviceCategory` as const}
+                            label="Category"
+                            options={[
+                              { label: "Flight", value: "flight" },
+                              { label: "Hotel", value: "hotel" },
+                              { label: "Transfer", value: "transfer" },
+                              { label: "Insurance", value: "insurance" },
+                              { label: "Visa", value: "visa" },
+                              { label: "Activity", value: "activity" },
+                              { label: "Other", value: "other" },
+                            ]}
+                            required
+                            disabled={isViewMode}
+                          />
+                        </div>
+                        <div className="md:col-span-3 space-y-3">
+                          <FormCombobox
+                            control={form.control}
+                            name={`items.${index}.supplierId` as const}
+                            label="Supplier"
+                            options={(suppliers || []).map((s) => ({
+                              label: s.name,
+                              value: s.id,
+                            }))}
+                            disabled={isViewMode}
+                          />
+                        </div>
+                        <div className="md:col-span-3 space-y-3">
+                          <FormField
+                            control={form.control}
+                            name={`items.${index}.supplierName` as const}
+                            label="Manual Supplier Name"
+                            placeholder="Optional unlisted supplier"
+                            disabled={isViewMode}
+                          />
+                        </div>
+                        <div className="md:col-span-3 space-y-3">
+                          <FormField
+                            control={form.control}
+                            name={`items.${index}.title` as const}
+                            label="Title"
+                            placeholder="e.g. DXB-KHI Flight"
+                            required
+                            disabled={isViewMode}
+                          />
+                        </div>
                       </div>
-                      <div className="md:col-span-3 space-y-3">
-                        <FormCombobox
-                          control={form.control}
-                          name={`items.${index}.supplierId` as const}
-                          label="Supplier"
-                          options={(suppliers || []).map((s) => ({
-                            label: s.name,
-                            value: s.id,
-                          }))}
-                          disabled={isViewMode}
-                        />
+
+                      <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-start">
+                        <div className="md:col-span-3 space-y-3">
+                          <FormField
+                            control={form.control}
+                            name={`items.${index}.costPrice` as const}
+                            label={`Cost / Unit (${currentCurrency})`}
+                            type="number"
+                            required
+                            disabled={isViewMode}
+                          />
+                        </div>
+                        <div className="md:col-span-3 space-y-3">
+                          <FormField
+                            control={form.control}
+                            name={`items.${index}.sellingPrice` as const}
+                            label={`Selling Price / Unit (${currentCurrency})`}
+                            type="number"
+                            required
+                            disabled={isViewMode}
+                          />
+                        </div>
+                        <div className="md:col-span-2 space-y-3">
+                          <FormField
+                            control={form.control}
+                            name={`items.${index}.quantity` as const}
+                            label="Qty"
+                            type="number"
+                            required
+                            disabled={isViewMode}
+                          />
+                        </div>
+                        <div className="md:col-span-3 space-y-3">
+                          <FormField
+                            control={form.control}
+                            name={`items.${index}.unit` as const}
+                            label="Unit"
+                            placeholder="e.g. Person, Night"
+                            disabled={isViewMode}
+                          />
+                        </div>
+                        <div className="md:col-span-1 pt-8 flex justify-end">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            className="text-tf-danger hover:bg-tf-danger/10 hover:text-tf-danger"
+                            onClick={() => removeItem(index)}
+                            disabled={isViewMode || itemFields.length <= 1}
+                            aria-label="Remove item"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </div>
-                      <div className="md:col-span-3 space-y-3">
-                        <FormField
-                          control={form.control}
-                          name={`items.${index}.title` as const}
-                          label="Title"
-                          placeholder="e.g. DXB-KHI Flight"
-                          required
-                          disabled={isViewMode}
-                        />
-                      </div>
-                      <div className="md:col-span-3 space-y-3">
+
+                      <div>
                         <FormField
                           control={form.control}
                           name={`items.${index}.description` as const}
-                          label="Notes"
-                          placeholder="Optional"
+                          label="Service Notes / Voucher Instructions"
+                          placeholder="e.g. Flight PNR 7X8Y9Z, Hotel Voucher Ref #..."
                           disabled={isViewMode}
                         />
-                      </div>
-
-                      <div className="md:col-span-3 space-y-3">
-                        <FormField
-                          control={form.control}
-                          name={`items.${index}.quantity` as const}
-                          label="Qty"
-                          type="number"
-                          required
-                          disabled={isViewMode}
-                        />
-                      </div>
-                      <div className="md:col-span-4 space-y-3">
-                        <FormField
-                          control={form.control}
-                          name={`items.${index}.costPrice` as const}
-                          label={`Cost Price (${currentCurrency})`}
-                          type="number"
-                          required
-                          disabled={isViewMode}
-                        />
-                      </div>
-                      <div className="md:col-span-4 space-y-3">
-                        <FormField
-                          control={form.control}
-                          name={`items.${index}.sellingPrice` as const}
-                          label={`Selling Price (${currentCurrency})`}
-                          type="number"
-                          required
-                          disabled={isViewMode}
-                        />
-                      </div>
-                      <div className="md:col-span-1 pt-8 flex justify-end">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          className="text-tf-danger hover:bg-tf-danger/10 hover:text-tf-danger"
-                          onClick={() => removeItem(index)}
-                          disabled={isViewMode || itemFields.length <= 1}
-                          aria-label="Remove item"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
                       </div>
                     </div>
                   ))}
@@ -491,10 +514,12 @@ export function QuotationForm({
                           serviceCategory: "other",
                           title: "",
                           description: "",
-                          supplierId: undefined,
                           quantity: 1,
+                          unit: "Person",
                           costPrice: 0,
                           sellingPrice: 0,
+                          supplierId: undefined,
+                          supplierName: undefined,
                         })
                       }
                     >

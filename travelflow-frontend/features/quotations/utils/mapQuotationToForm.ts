@@ -31,9 +31,11 @@ export function mapQuotationToForm(q: Quotation): QuotationFormValues {
       title: it.title || "",
       description: it.description || "",
       quantity: it.quantity || 1,
+      unit: (it as any).unit || "Person",
       costPrice: it.costPrice || 0,
       sellingPrice: it.sellingPrice || 0,
       supplierId: it.supplierId || undefined,
+      supplierName: (it as any).supplierName || undefined,
     })),
     taxes: (Array.isArray(q.taxes) ? q.taxes : []).map((t) => ({
       id: t.id,
