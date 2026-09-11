@@ -222,7 +222,20 @@ export async function getCustomerLedger(req: Request, res: Response) {
 }
 
 export async function listBookings(req: Request, res: Response) {
-  ApiResponse.success(res, await domain.listBookings(buildContext(req), getPagination(req), getDateFilter(req)));
+  const extraFilters = {
+    supplierId: req.query.supplierId as string | undefined,
+    customerId: req.query.customerId as string | undefined,
+    branchId: req.query.branchId as string | undefined,
+  };
+  ApiResponse.success(
+    res,
+    await domain.listBookings(
+      buildContext(req),
+      getPagination(req),
+      getDateFilter(req),
+      extraFilters
+    )
+  );
 }
 
 export async function getBooking(req: Request, res: Response) {
@@ -430,6 +443,11 @@ export async function deleteSupplier(req: Request, res: Response) {
 
 export async function getSupplierStatement(req: Request, res: Response) {
   const data = await domain.getSupplierStatement(buildContext(req), req.params.id);
+  ApiResponse.success(res, data);
+}
+
+export async function getSupplierUnconfirmedServices(req: Request, res: Response) {
+  const data = await domain.getSupplierUnconfirmedServices(buildContext(req), req.params.id);
   ApiResponse.success(res, data);
 }
 

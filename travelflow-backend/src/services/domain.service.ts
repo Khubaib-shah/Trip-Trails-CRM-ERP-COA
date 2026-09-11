@@ -1378,9 +1378,22 @@ export async function listBookings(
   ctx: AgencyContext,
   pagination?: PaginationOptions,
   dates?: DateFilterOptions,
+  extraFilters?: { supplierId?: string; customerId?: string; branchId?: string },
 ) {
   const filter: any = agencyScope(ctx);
   applyDateFilter(filter, dates);
+
+  if (extraFilters?.customerId) {
+    filter.customerId = extraFilters.customerId;
+  }
+
+  if (extraFilters?.branchId) {
+    filter.branchId = extraFilters.branchId;
+  }
+
+  if (extraFilters?.supplierId) {
+    filter.services = { some: { supplierId: extraFilters.supplierId, isDeleted: false } };
+  }
 
   if (!pagination) {
     const bookings = await prisma.booking.findMany({
@@ -2915,47 +2928,110 @@ export async function getSupplierStatement(
   });
   if (!supplier) throw ApiError.notFound("Supplier");
 
-  const apAccount = await mapping.getSupplierConfirmedAccount(ctx.agencyId, "11111111-1111-1111-1111-111111111101");
-
-  const services = await prisma.bookingService.findMany({ where: { supplierId, agencyId: ctx.agencyId }, select: { id: true } });
-  const payments = await prisma.supplierPayment.findMany({ where: { supplierId, agencyId: ctx.agencyId }, select: { id: true } });
-
-  const serviceIds = services.map(s => s.id);
-  const paymentIds = payments.map(p => p.id);
-
-  const lines = await prisma.journalLine.findMany({
-    where: {
-      agencyId: ctx.agencyId,
-      accountId: apAccount.id,
-      journalEntry: {
-        status: "POSTED",
-        OR: [
-          { sourceModule: "SUPPLIER_INVOICE_CONFIRMATION", sourceId: { in: serviceIds } },
-          { sourceModule: "SUPPLIER_PAYMENT", sourceId: { in: paymentIds } },
-        ]
-      }
-    },
-    include: { journalEntry: true },
-    orderBy: { journalEntry: { date: "asc" } }
+  const services = await prisma.bookingService.findMany({
+    where: { supplierId, agencyId: ctx.agencyId, isDeleted: false },
+    include: { booking: { select: { bookingRef: true } } },
+    orderBy: { createdAt: "asc" },
   });
 
+  const payments = await prisma.supplierPayment.findMany({
+    where: { supplierId, agencyId: ctx.agencyId, isDeleted: false },
+    orderBy: { createdAt: "asc" },
+  });
+
+  const rawEntries: {
+    date: Date;
+    type: string;
+    reference: string;
+    description: string;
+    debit: number;
+    credit: number;
+  }[] = [];
+
+  for (const s of services) {
+    const cost = Number(s.supplierInvoiceAmount ?? s.costPrice);
+    if (cost > 0) {
+      rawEntries.push({
+        date: s.createdAt,
+        type: s.financialStatus === "confirmed" ? "SUPPLIER_BILL_CONFIRMED" : "SUPPLIER_OBLIGATION",
+        reference: s.supplierRef || s.booking?.bookingRef || `SVC-${s.id.slice(0, 8)}`,
+        description: s.title
+          ? `${s.title}${s.booking?.bookingRef ? ` (Ref: ${s.booking.bookingRef})` : ""}`
+          : `Supplier Obligation${s.booking?.bookingRef ? ` (Ref: ${s.booking.bookingRef})` : ""}`,
+        debit: 0,
+        credit: cost,
+      });
+    }
+  }
+
+  for (const p of payments) {
+    if (p.amount > 0) {
+      rawEntries.push({
+        date: p.createdAt,
+        type: "SUPPLIER_PAYMENT",
+        reference: p.paymentRef,
+        description: `Payment to Supplier${p.notes ? ` (${p.notes})` : ""}`,
+        debit: Number(p.amount),
+        credit: 0,
+      });
+    }
+  }
+
+  rawEntries.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
   let runningBalance = 0;
-  const statement = lines.map(line => {
-    runningBalance += line.baseCredit - line.baseDebit;
+  const statementEntries = rawEntries.map((entry) => {
+    runningBalance += entry.credit - entry.debit;
     return {
-      date: line.journalEntry.date,
-      type: line.journalEntry.sourceModule,
-      reference: line.journalEntry.reference,
-      description: line.description || line.journalEntry.description,
-      debit: line.baseDebit,
-      credit: line.baseCredit,
+      ...entry,
       balance: runningBalance,
     };
   });
 
-  statement.reverse();
+  const statement = [...statementEntries].reverse();
 
   return { supplier, entries: statement, finalBalance: runningBalance };
+}
+
+export async function getSupplierUnconfirmedServices(
+  ctx: AgencyContext,
+  supplierId: string,
+) {
+  const services = await prisma.bookingService.findMany({
+    where: {
+      agencyId: ctx.agencyId,
+      supplierId,
+      supplierInvoiceAmount: null,
+      isDeleted: false,
+    },
+    include: {
+      booking: {
+        select: {
+          id: true,
+          bookingRef: true,
+          title: true,
+        },
+      },
+      supplier: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
+    },
+    orderBy: { createdAt: "desc" },
+  });
+
+  return services.map((s) => ({
+    id: s.id,
+    bookingId: s.bookingId,
+    bookingRef: s.booking?.bookingRef,
+    title: s.title,
+    costPrice: s.costPrice,
+    serviceCategory: s.serviceCategory,
+    supplierId: s.supplierId,
+    supplier: s.supplier,
+  }));
 }
 
 export async function allocateCustomerPayment(

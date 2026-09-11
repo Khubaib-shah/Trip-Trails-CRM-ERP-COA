@@ -62,7 +62,7 @@ export default function UserDetailPage() {
         API.getUser(id),
         API.getBranches(),
         API.getLeads(),
-        API.getBookings(),
+        API.getBookings({ limit: 20 }),
         API.getRoles(),
       ],
     );

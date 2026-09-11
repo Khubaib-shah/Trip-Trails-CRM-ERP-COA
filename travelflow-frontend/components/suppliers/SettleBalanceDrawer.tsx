@@ -42,17 +42,7 @@ export function SettleBalanceDrawer({
 
   const loadUnconfirmedServices = async () => {
     try {
-      const bookings = await API.getBookings();
-      const svcs: any[] = [];
-      for (const b of bookings) {
-        if (b.services) {
-          for (const s of b.services) {
-            if (s.supplierId === supplier.id && s.supplierInvoiceAmount == null) {
-              svcs.push({ ...s, bookingRef: b.bookingRef, supplier });
-            }
-          }
-        }
-      }
+      const svcs = await API.getSupplierUnconfirmedServices(supplier.id);
       setUnconfirmedServices(svcs);
     } catch (err) {
       console.error("Failed to load supplier unconfirmed services", err);
@@ -155,36 +145,38 @@ export function SettleBalanceDrawer({
             </div>
           )}
 
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-tf-text-primary">
-              Amount to Pay ({activeCurrency})
-            </label>
-            <Input
-              type="number"
-              placeholder="e.g. 50000"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              className="bg-tf-surface"
-              min="1"
-              required
-            />
-          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-tf-text-primary">
+                Amount to Pay ({activeCurrency})
+              </label>
+              <Input
+                type="number"
+                placeholder="e.g. 50000"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                className="bg-tf-surface"
+                min="1"
+                required
+              />
+            </div>
 
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-tf-text-primary">
-              Payment Method
-            </label>
-            <Select value={paymentMethod} onValueChange={setPaymentMethod}>
-              <SelectTrigger className="bg-tf-surface">
-                <SelectValue placeholder="Select method" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
-                <SelectItem value="cheque">Cheque</SelectItem>
-                <SelectItem value="cash">Cash</SelectItem>
-                <SelectItem value="credit_card">Credit Card</SelectItem>
-              </SelectContent>
-            </Select>
+            <div className="space-y-2">
+              <label className="w-full text-sm font-medium text-tf-text-primary">
+                Payment Method
+              </label>
+              <Select value={paymentMethod} onValueChange={setPaymentMethod}>
+                <SelectTrigger className="bg-tf-surface">
+                  <SelectValue placeholder="Select method" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
+                  <SelectItem value="cheque">Cheque</SelectItem>
+                  <SelectItem value="cash">Cash</SelectItem>
+                  <SelectItem value="credit_card">Credit Card</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
           <div className="space-y-2">

@@ -417,10 +417,32 @@ export const ApiClient = {
     del<boolean>(`/customers/documents/${id}`),
 
   // ── Bookings ──
-  getBookings: (dates?: { from?: Date; to?: Date }) =>
-    get<unknown[]>(buildDateQuery("/bookings", dates)).then(
-      reviveList<Booking>,
-    ),
+  getBookings: (params?: {
+    page?: number;
+    limit?: number;
+    supplierId?: string;
+    customerId?: string;
+    branchId?: string;
+    dates?: { from?: Date; to?: Date };
+  }) => {
+    let url = "/bookings";
+    if (params?.dates) {
+      url = buildDateQuery(url, params.dates);
+    }
+    const searchParams = new URLSearchParams();
+    if (params?.page) searchParams.set("page", String(params.page));
+    if (params?.limit) searchParams.set("limit", String(params.limit));
+    if (params?.supplierId) searchParams.set("supplierId", params.supplierId);
+    if (params?.customerId) searchParams.set("customerId", params.customerId);
+    if (params?.branchId) searchParams.set("branchId", params.branchId);
+
+    const queryString = searchParams.toString();
+    if (queryString) {
+      url += (url.includes("?") ? "&" : "?") + queryString;
+    }
+
+    return get<any>(url).then((res) => reviveList<Booking>(res?.data || res));
+  },
 
   getBooking: (id: string) =>
     get<unknown>(`/bookings/${id}`).then(reviveItem<Booking>),
@@ -695,6 +717,8 @@ export const ApiClient = {
   // ── Reports & Ledger ──
   getCustomerLedger: (id: string) => get<any>(`/customers/${id}/ledger`),
   getSupplierStatement: (id: string) => get<any>(`/suppliers/${id}/statement`),
+  getSupplierUnconfirmedServices: (id: string) =>
+    get<any[]>(`/suppliers/${id}/unconfirmed-services`),
   getARLedger: () => get<any>("/reports/ar-ledger"),
   getAPLedger: () => get<any>("/reports/ap-ledger"),
 

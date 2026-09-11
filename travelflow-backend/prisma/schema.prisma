@@ -653,6 +653,8 @@ model BookingService {
   @@index([agencyId, bookingId])
   @@index([agencyId, serviceCategory])
   @@index([agencyId, isDeleted])
+  @@index([agencyId, supplierId, isDeleted])
+  @@index([agencyId, supplierId, supplierInvoiceAmount])
 }
 
 model BookingTraveler {

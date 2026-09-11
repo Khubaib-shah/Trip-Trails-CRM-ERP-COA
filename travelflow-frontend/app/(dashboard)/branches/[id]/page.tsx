@@ -57,12 +57,12 @@ export default function BranchDetailPage() {
     const [branchData, users, bookings] = await Promise.all([
       API.getBranch(id),
       API.getUsers(),
-      API.getBookings(),
+      API.getBookings({ branchId: id, limit: 100 }),
     ]);
     setBranch(branchData);
     setAllUsers(users);
     setAgents(users.filter((u) => u.branchId === id));
-    const branchBookings = bookings.filter((b: Booking) => b.branchId === id);
+    const branchBookings = bookings;
     setStats({
       revenue: branchBookings.reduce((s, b) => s + (b.totalSell || 0), 0),
       bookings: branchBookings.length,

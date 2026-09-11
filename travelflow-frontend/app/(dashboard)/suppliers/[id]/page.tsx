@@ -65,11 +65,11 @@ export default function SupplierDetailPage() {
     const data = await API.getSupplier(id);
     setSupplier(data);
     if (data) {
-      const [allBookings, stmt] = await Promise.all([
-        API.getBookings(),
+      const [supplierBookings, stmt] = await Promise.all([
+        API.getBookings({ supplierId: id, limit: 50 }),
         API.getSupplierStatement(id),
       ]);
-      setBookings(allBookings.filter((b) => b.services?.some((s) => s.supplierId === id)));
+      setBookings(supplierBookings);
       setStatement(stmt);
     }
     setIsLoading(false);
@@ -368,14 +368,14 @@ export default function SupplierDetailPage() {
                     </p>
                   </div>
                   <div className="text-right">
-                    {entry.debit > 0 && (
+                    {entry.credit > 0 && (
                       <p className="text-tf-danger font-mono font-bold text-sm">
-                        + {formatCurrency(entry.debit, activeCurrency)}
+                        + {formatCurrency(entry.credit, activeCurrency)}
                       </p>
                     )}
-                    {entry.credit > 0 && (
+                    {entry.debit > 0 && (
                       <p className="text-tf-success font-mono font-bold text-sm">
-                        - {formatCurrency(entry.credit, activeCurrency)}
+                        - {formatCurrency(entry.debit, activeCurrency)}
                       </p>
                     )}
                     {entry.balance !== undefined && (

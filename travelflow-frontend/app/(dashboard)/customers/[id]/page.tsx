@@ -72,8 +72,8 @@ export default function CustomerDetailPage() {
     const data = await API.getCustomer(id);
     setCustomer(data);
     if (data) {
-      const allBookings = await API.getBookings();
-      setBookings(allBookings.filter((b) => b.customerId === id));
+      const customerBookings = await API.getBookings({ customerId: id, limit: 50 });
+      setBookings(customerBookings);
       setNotes(await API.getCustomerNotes(id));
       setDocuments(await API.getCustomerDocuments(id));
       setLedger(await API.getCustomerLedger(id));

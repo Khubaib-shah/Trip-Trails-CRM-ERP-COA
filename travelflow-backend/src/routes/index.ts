@@ -396,6 +396,12 @@ protectedRouter.get(
   validate(idParamSchema, "params"),
   asyncHandler(domain.getSupplierStatement),
 );
+protectedRouter.get(
+  "/suppliers/:id/unconfirmed-services",
+  requirePermission("Suppliers: View"),
+  validate(idParamSchema, "params"),
+  asyncHandler(domain.getSupplierUnconfirmedServices),
+);
 
 // Customer Payments
 protectedRouter.get(

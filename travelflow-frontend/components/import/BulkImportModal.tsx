@@ -377,7 +377,7 @@ export default function BulkImportModal({
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && handleClose()}>
-      <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col">
+      <DialogContent className="max-w-7xl max-h-[90vh] flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <FileSpreadsheet className="h-5 w-5 text-tf-accent" />
@@ -499,8 +499,8 @@ export default function BulkImportModal({
               <div className="space-y-3">
                 <div
                   className={`border-2 border-dashed rounded-xl p-8 text-center transition-colors ${dragOver
-                      ? "border-tf-accent bg-tf-accent/5"
-                      : "border-tf-border hover:border-tf-accent/50"
+                    ? "border-tf-accent bg-tf-accent/5"
+                    : "border-tf-border hover:border-tf-accent/50"
                     }`}
                   onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
                   onDragLeave={() => setDragOver(false)}

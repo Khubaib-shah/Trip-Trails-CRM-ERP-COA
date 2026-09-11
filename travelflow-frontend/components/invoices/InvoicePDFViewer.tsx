@@ -247,14 +247,14 @@ export default function InvoicePDFViewer({ data }: { data: any }) {
   const bgUrl = `${origin}/assets/invoice/triptrails-letter-head.png`;
 
   const Doc = () => (
-    <Document title={`Invoice-${data.invoiceRef}`}>
+    <Document title={`Tax-Invoice-${data.invoiceRef}`}>
       <Page size="A4" style={styles.page}>
         <Image src={bgUrl} style={styles.background} fixed />
 
         <View style={styles.content}>
           {/* Invoice Number */}
           <View>
-            <Text style={styles.invoiceNumberLabel}>Invoice Number:</Text>
+            <Text style={styles.invoiceNumberLabel}>TAX INVOICE NUMBER:</Text>
             <View style={styles.invoiceNumberBox}>
               <Text style={styles.invoiceNumberText}>{data.invoiceRef || "N/A"}</Text>
             </View>
@@ -278,6 +278,13 @@ export default function InvoicePDFViewer({ data }: { data: any }) {
                 <View style={styles.detailRow}>
                   <Text style={styles.detailLabel}>Company:</Text>
                   <Text style={styles.detailValue}>{data.customer?.companyName}</Text>
+                </View>
+              ) : null}
+
+              {(data.customer?.taxNumber || data.customer?.taxId) ? (
+                <View style={styles.detailRow}>
+                  <Text style={styles.detailLabel}>TRN / Tax No:</Text>
+                  <Text style={styles.detailValue}>{data.customer?.taxNumber || data.customer?.taxId}</Text>
                 </View>
               ) : null}
 
@@ -305,7 +312,7 @@ export default function InvoicePDFViewer({ data }: { data: any }) {
 
             {/* Right: Invoice Info */}
             <View style={styles.detailsCol}>
-              <Text style={styles.sectionTitle}>Invoice Details</Text>
+              <Text style={styles.sectionTitle}>Tax Invoice Details</Text>
 
               <View style={styles.detailRow}>
                 <Text style={styles.detailLabel}>Date:</Text>

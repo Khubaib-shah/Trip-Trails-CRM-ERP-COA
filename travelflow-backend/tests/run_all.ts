@@ -12,6 +12,7 @@ const testFiles = [
   "p0_3_margin_journals.test.ts",
   "p0_4_pricing_quantity.test.ts",
   "p0_5_duplicate_invoices.test.ts",
+  "p0_6_supplier_ledger_import_accounting.test.ts",
 ];
 
 console.log("════════════════════════════════════════════════════════════");
