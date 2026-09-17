@@ -23,7 +23,7 @@ import {
   generateSyntheticPassport,
 } from "./pakistani-data";
 import { calculateServiceFinancials } from "../lib/financial-calculator";
-import { generateRef, RefPrefix } from "../utils/refGenerator";
+import { generateRef } from "../utils/refGenerator";
 import {
   postInvoiceJournal,
   confirmSupplierInvoice,
@@ -116,7 +116,7 @@ export async function seedDemoEnvironment(options: { reset?: boolean } = {}) {
 
   // 1. Configure or Upsert Agency
   console.log(`[1/8] Upserting Primary Agency: ${DEMO_CONFIG.agency.name}...`);
-  const agency = await prisma.agency.upsert({
+  await prisma.agency.upsert({
     where: { id: agencyId },
     update: {
       name: DEMO_CONFIG.agency.name,
@@ -413,7 +413,6 @@ export async function seedDemoEnvironment(options: { reset?: boolean } = {}) {
   const now = Date.now();
   const DAY_MS = 24 * 60 * 60 * 1000;
   const agentsList = Array.from(userMap.values()).filter((u) => u.role === "agent");
-  const branchIds = Array.from(branchMap.values());
   const adminUser = userMap.get("admin@travelflow.demo") || agentsList[0];
 
   const ctx = {
