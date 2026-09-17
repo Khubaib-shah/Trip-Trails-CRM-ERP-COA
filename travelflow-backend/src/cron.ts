@@ -17,6 +17,14 @@ async function main() {
     }
 
     console.log(`Amortization processing complete. Processed: ${totalProcessed}, Errors: ${totalErrors}`);
+    
+    // Process continuous demo activity if demo mode is enabled
+    try {
+      const { runDailyDemoCron } = await import("./demo/cron-runner");
+      await runDailyDemoCron();
+    } catch (demoErr) {
+      console.error("Error in demo continuous activity generator:", demoErr);
+    }
   } catch (error) {
     console.error("Critical error in amortization processing:", error);
     process.exit(1);

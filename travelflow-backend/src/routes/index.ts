@@ -38,10 +38,11 @@ import accountingRouter from "./accounting";
 import expensesRouter from "./expenses";
 import reportsRouter from "./reports";
 import importRouter from "./import.routes";
+import cronRouter from "./cron.routes";
 
 const router = Router();
 
-// ─── Health Check ─────────────────────────────────────────────────────────────
+// ─── Health Check & Cron ───────────────────────────────────────────────────────
 router.get("/health", (_req, res) => {
   res.json({
     success: true,
@@ -49,6 +50,7 @@ router.get("/health", (_req, res) => {
     timestamp: new Date().toISOString(),
   });
 });
+router.use("/cron", cronRouter);
 
 // ─── Public Auth ──────────────────────────────────────────────────────────────
 router.post("/auth/login", validate(loginSchema), asyncHandler(auth.login));

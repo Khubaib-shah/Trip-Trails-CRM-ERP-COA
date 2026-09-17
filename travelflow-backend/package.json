@@ -10,6 +10,9 @@
     "build": "tsc",
     "lint": "eslint . --ext .ts",
     "seed": "npx tsx prisma/seed-basic.ts",
+    "demo:seed": "npx tsx src/demo/initial-seed.ts",
+    "demo:daily": "npx tsx src/demo/cron-runner.ts",
+    "demo:verify": "npx tsx src/demo/verify-demo.ts",
     "test": "npx tsx tests/run_all.ts"
   },
   "dependencies": {
