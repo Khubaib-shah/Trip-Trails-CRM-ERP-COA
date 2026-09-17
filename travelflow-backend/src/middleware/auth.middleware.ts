@@ -9,7 +9,7 @@ interface CachedSession {
   expiresAt: number;
 }
 
-// In-memory cache for validated sessions (60s TTL) to prevent 2 DB roundtrips on every HTTP request
+// In-memory cache for validated sessions (300s / 5m TTL) to prevent DB roundtrips on every HTTP request
 const sessionCache = new Map<string, CachedSession>();
 const revokedTokens = new Set<string>();
 
@@ -77,11 +77,11 @@ export async function authMiddleware(req: Request, _res: Response, next: NextFun
       throw ApiError.unauthorized("Invalid or expired token");
     }
 
-    // Cache session for 60 seconds (or until token expiry)
+    // Cache session for 300 seconds (5 minutes, or until token expiry)
     sessionCache.set(token, {
       user,
       agencyId: user.agencyId,
-      expiresAt: now + 60_000,
+      expiresAt: now + 300_000,
     });
 
     console.log(`[AUTH] DB lookup took ${Date.now() - dbStart}ms for ${user.email}`);

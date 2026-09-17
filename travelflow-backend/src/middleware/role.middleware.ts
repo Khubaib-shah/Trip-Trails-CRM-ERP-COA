@@ -66,7 +66,7 @@ export function requirePermission(requiredPermission: string | string[]) {
         permissions = (role.permissions as string[]) || [];
         rolePermissionsCache.set(cacheKey, {
           permissions,
-          expiresAt: now + 60_000,
+          expiresAt: now + 300_000,
         });
       }
 
