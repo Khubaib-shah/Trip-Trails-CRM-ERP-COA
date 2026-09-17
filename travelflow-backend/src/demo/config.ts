@@ -7,7 +7,9 @@
 export const DEMO_CONFIG = {
   // Tenant scoping & safety
   enabled: process.env.DEMO_MODE !== "false", // Default active in dev unless explicitly disabled
-  cronSecret: process.env.CRON_SECRET || "travelflow-demo-cron-secret-2026",
+  cronSecret: (process.env.CRON_SECRET && process.env.CRON_SECRET.trim().length > 0)
+    ? process.env.CRON_SECRET.trim()
+    : "travelflow-demo-cron-secret-2026",
   timezone: "Asia/Karachi",
   defaultCurrency: "PKR",
   defaultPassword: "DemoPassword123!",
