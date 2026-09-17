@@ -14,6 +14,7 @@ import { DrawerForm } from "@/components/forms/DrawerForm";
 import { FormField, FormPhoneField, FormSelect } from "@/components/forms/FormField";
 import { Form } from "@/components/ui/form";
 import { useEntityDrawer } from "@/hooks/use-entity-drawer";
+import { usePermissions } from "@/hooks/use-permissions";
 
 const defaultValues: BranchFormValues = {
   name: "",
@@ -29,6 +30,9 @@ const defaultValues: BranchFormValues = {
 export default function BranchesPage() {
   const router = useRouter();
   const { data: branches = [], isLoading: loading } = useBranches();
+  const { hasPermission, isAdmin } = usePermissions();
+  const canCreate = isAdmin || hasPermission("Branches: Create");
+  const canEdit = isAdmin || hasPermission("Branches: Edit");
   
   const createMutation = useCreateBranch();
   const updateMutation = useUpdateBranch();
@@ -75,12 +79,14 @@ export default function BranchesPage() {
             Manage your office locations across Pakistan and GCC.
           </p>
         </div>
-        <Button
-          onClick={handleOpenCreate}
-          className="bg-tf-primary text-white hover:bg-tf-primary-hover shadow-sm"
-        >
-          <Plus className="mr-2 h-4 w-4" /> Add Branch
-        </Button>
+        {canCreate && (
+          <Button
+            onClick={handleOpenCreate}
+            className="bg-tf-primary text-white hover:bg-tf-primary-hover shadow-sm"
+          >
+            <Plus className="mr-2 h-4 w-4" /> Add Branch
+          </Button>
+        )}
       </div>
 
       {loading ? (
@@ -99,12 +105,14 @@ export default function BranchesPage() {
           <p className="tf-body text-tf-text-muted mb-4">
             Create your first branch to get started.
           </p>
-          <Button
-            onClick={handleOpenCreate}
-            className="bg-tf-primary text-white hover:bg-tf-primary-hover"
-          >
-            <Plus className="mr-2 h-4 w-4" /> Add Branch
-          </Button>
+          {canCreate && (
+            <Button
+              onClick={handleOpenCreate}
+              className="bg-tf-primary text-white hover:bg-tf-primary-hover"
+            >
+              <Plus className="mr-2 h-4 w-4" /> Add Branch
+            </Button>
+          )}
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
@@ -140,27 +148,29 @@ export default function BranchesPage() {
                 </p>
               </div>
 
-              <div className="flex justify-end pt-4 border-t border-tf-border">
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    form.reset({
-                      name: branch.name,
-                      code: branch.code,
-                      city: branch.city,
-                      address: branch.address ?? "",
-                      phone: branch.phone ?? "",
-                      currency: branch.currency ?? "PKR",
-                      isHeadOffice: String(branch.isHeadOffice) as any,
-                      status: branch.status,
-                    });
-                    openEdit(branch.id);
-                  }}
-                  className="text-xs text-tf-text-muted hover:text-tf-primary transition-colors"
-                >
-                  Edit
-                </button>
-              </div>
+              {canEdit && (
+                <div className="flex justify-end pt-4 border-t border-tf-border">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      form.reset({
+                        name: branch.name,
+                        code: branch.code,
+                        city: branch.city,
+                        address: branch.address ?? "",
+                        phone: branch.phone ?? "",
+                        currency: branch.currency ?? "PKR",
+                        isHeadOffice: String(branch.isHeadOffice) as any,
+                        status: branch.status,
+                      });
+                      openEdit(branch.id);
+                    }}
+                    className="text-xs text-tf-text-muted hover:text-tf-primary transition-colors"
+                  >
+                    Edit
+                  </button>
+                </div>
+              )}
             </div>
           ))}
         </div>

@@ -23,6 +23,7 @@ import { Input } from "@/components/ui/input";
 import { withCreateDrawer } from "@/constants/create-drawer";
 import { useCreateDrawerStore } from "@/store/create-drawer.store";
 import { useAuthStore } from "@/store/auth.store";
+import { usePermissions } from "@/hooks/use-permissions";
 
 interface CommandItem {
   id: string;
@@ -33,6 +34,7 @@ interface CommandItem {
   group: string;
   keywords?: string[];
   roles?: string[];
+  permission?: string | string[];
 }
 
 export function SearchCommand() {
@@ -44,6 +46,7 @@ export function SearchCommand() {
     (state) => state.requestOpen,
   );
   const { user } = useAuthStore();
+  const { hasPermission, isAdmin } = usePermissions();
   const role = user?.role || "agent";
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -87,6 +90,7 @@ export function SearchCommand() {
       action: () => navigate("/leads"),
       group: "Navigate",
       keywords: ["pipeline", "crm"],
+      permission: "Leads: View",
     },
     {
       id: "nav-customers",
@@ -96,6 +100,7 @@ export function SearchCommand() {
       action: () => navigate("/customers"),
       group: "Navigate",
       keywords: ["clients"],
+      permission: "Customers: View",
     },
     {
       id: "nav-bookings",
@@ -105,6 +110,7 @@ export function SearchCommand() {
       action: () => navigate("/bookings"),
       group: "Navigate",
       keywords: ["flights", "tickets", "pnr"],
+      permission: "Bookings: View",
     },
     {
       id: "nav-quotations",
@@ -114,6 +120,7 @@ export function SearchCommand() {
       action: () => navigate("/quotations"),
       group: "Navigate",
       keywords: ["quotes", "proposals", "quotation", "quotaion"],
+      permission: "Quotations: View",
     },
     {
       id: "nav-suppliers",
@@ -123,6 +130,7 @@ export function SearchCommand() {
       action: () => navigate("/suppliers"),
       group: "Navigate",
       keywords: ["vendors", "airlines"],
+      permission: "Suppliers: View",
     },
     {
       id: "nav-expenses",
@@ -133,6 +141,7 @@ export function SearchCommand() {
       group: "Navigate",
       keywords: ["costs", "finance"],
       roles: ["admin", "manager"],
+      permission: "Expenses: View",
     },
     {
       id: "nav-reports",
@@ -143,6 +152,7 @@ export function SearchCommand() {
       group: "Navigate",
       keywords: ["analytics"],
       roles: ["admin", "manager"],
+      permission: "Reports: View",
     },
     {
       id: "nav-branches",
@@ -153,6 +163,7 @@ export function SearchCommand() {
       group: "Navigate",
       keywords: ["offices"],
       roles: ["admin", "manager"],
+      permission: ["Branches: View", "Branches: Access All"],
     },
     {
       id: "nav-users",
@@ -163,6 +174,7 @@ export function SearchCommand() {
       group: "Navigate",
       keywords: ["agents", "staff"],
       roles: ["admin", "manager"],
+      permission: "Users: View",
     },
     {
       id: "nav-settings",
@@ -173,6 +185,7 @@ export function SearchCommand() {
       group: "Navigate",
       keywords: ["config", "preferences"],
       roles: ["admin", "manager"],
+      permission: "Settings: View",
     },
     // Quick Actions
     {
@@ -183,6 +196,7 @@ export function SearchCommand() {
       action: () => navigateAndCreate("/leads"),
       group: "Quick Actions",
       keywords: ["create lead", "new lead"],
+      permission: "Leads: Create",
     },
     {
       id: "act-new-customer",
@@ -192,6 +206,7 @@ export function SearchCommand() {
       action: () => navigateAndCreate("/customers"),
       group: "Quick Actions",
       keywords: ["create customer", "new customer"],
+      permission: "Customers: Create",
     },
     {
       id: "act-new-booking",
@@ -201,6 +216,7 @@ export function SearchCommand() {
       action: () => navigateAndCreate("/bookings"),
       group: "Quick Actions",
       keywords: ["new booking", "flight"],
+      permission: "Bookings: Create",
     },
     {
       id: "act-new-quotation",
@@ -210,6 +226,7 @@ export function SearchCommand() {
       action: () => navigateAndCreate("/quotations"),
       group: "Quick Actions",
       keywords: ["quotation", "quote", "quotation management"],
+      permission: "Quotations: Create",
     },
 
     {
@@ -220,6 +237,7 @@ export function SearchCommand() {
       action: () => navigateAndCreate("/suppliers"),
       group: "Quick Actions",
       keywords: ["new supplier", "vendor"],
+      permission: "Suppliers: Create",
     },
     {
       id: "act-new-expense",
@@ -230,8 +248,21 @@ export function SearchCommand() {
       group: "Quick Actions",
       keywords: ["add expense", "new expense"],
       roles: ["admin", "manager"],
+      permission: "Expenses: Create",
     },
-  ].filter((item) => !item.roles || item.roles.includes(role));
+  ].filter((item) => {
+    if (
+      item.roles &&
+      !isAdmin &&
+      !item.roles.some((r) => r.toLowerCase() === role.toLowerCase())
+    ) {
+      return false;
+    }
+    if (item.permission && !hasPermission(item.permission)) {
+      return false;
+    }
+    return true;
+  });
 
   const filtered = searchQuery.trim()
     ? allItems.filter((item) => {

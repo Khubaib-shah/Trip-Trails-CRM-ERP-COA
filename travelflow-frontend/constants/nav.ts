@@ -24,6 +24,7 @@ export interface NavItem {
   icon: LucideIcon;
   badge?: string;
   roles?: string[];
+  permission?: string | string[];
   exact?: boolean;
 }
 
@@ -51,17 +52,20 @@ export const sidebarNav: NavGroup[] = [
         title: "Leads",
         href: "/leads",
         icon: UserPlus,
+        permission: "Leads: View",
       },
       {
         title: "Customers",
         href: "/customers",
         icon: Users,
+        permission: "Customers: View",
       },
       {
         title: "Quotations",
         href: "/quotations",
         icon: FileText,
         roles: ["admin", "manager"],
+        permission: "Quotations: View",
       },
     ],
   },
@@ -72,21 +76,25 @@ export const sidebarNav: NavGroup[] = [
         title: "Bookings",
         href: "/bookings",
         icon: Plane,
+        permission: "Bookings: View",
       },
       {
         title: "Invoices",
         href: "/invoices",
         icon: FileText,
+        permission: "Invoices: View",
       },
       {
         title: "Credit Notes",
         href: "/credit-notes",
         icon: FileMinus,
+        permission: "Invoices: View",
       },
       {
         title: "Payments",
         href: "/receipts",
         icon: Receipt,
+        permission: "Accounting: AR",
       },
     ],
   },
@@ -97,12 +105,14 @@ export const sidebarNav: NavGroup[] = [
         title: "Suppliers",
         href: "/suppliers",
         icon: Building2,
+        permission: "Suppliers: View",
       },
       {
         title: "Expenses",
         href: "/expenses",
         icon: CreditCard,
         roles: ["admin", "manager"],
+        permission: "Expenses: View",
       },
     ],
   },
@@ -114,18 +124,21 @@ export const sidebarNav: NavGroup[] = [
         href: "/accounting/ar",
         icon: Users,
         roles: ["admin", "manager"],
+        permission: "Accounting: AR",
       },
       {
         title: "A/P Ledger",
         href: "/accounting/ap",
         icon: Building2,
         roles: ["admin", "manager"],
+        permission: "Accounting: AP",
       },
       {
         title: "Chart of Accounts",
         href: "/accounting",
         icon: BookOpen,
         roles: ["admin", "manager"],
+        permission: "Accounting: Chart of Accounts",
         exact: true,
       },
       {
@@ -133,6 +146,7 @@ export const sidebarNav: NavGroup[] = [
         href: "/accounting/journal-entries",
         icon: ScrollText,
         roles: ["admin", "manager"],
+        permission: "Accounting: Journal",
       },
     ],
   },
@@ -144,6 +158,7 @@ export const sidebarNav: NavGroup[] = [
         href: "/reports",
         icon: BarChart3,
         roles: ["admin", "manager"],
+        permission: "Reports: View",
       },
     ],
   },
@@ -155,18 +170,21 @@ export const sidebarNav: NavGroup[] = [
         href: "/branches",
         icon: GitBranch,
         roles: ["admin", "manager"],
+        permission: ["Branches: View", "Branches: Access All"],
       },
       {
         title: "Users",
         href: "/users",
         icon: UserCog,
         roles: ["admin", "manager"],
+        permission: "Users: View",
       },
       {
         title: "Roles",
         href: "/roles",
         icon: ShieldCheck,
         roles: ["admin", "manager"],
+        permission: "Roles: View",
       },
     ],
   },
@@ -178,8 +196,8 @@ export const sidebarNav: NavGroup[] = [
         href: "/settings",
         icon: Settings,
         roles: ["admin", "manager"],
+        permission: "Settings: View",
       },
     ],
   },
-
 ];

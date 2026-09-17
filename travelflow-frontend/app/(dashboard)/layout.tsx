@@ -8,8 +8,9 @@ import { useSidebarStore } from "@/store/sidebar.store";
 import { useAuthStore } from "@/store/auth.store";
 import { ErrorBoundary } from "@/components/shared/ErrorBoundary";
 import { Button } from "@/components/ui/button";
-import { WifiOff, Users, Target, FileText, Calendar, ArrowRight } from "lucide-react";
+import { WifiOff, Users, Target, FileText, Calendar, ArrowRight, ShieldAlert } from "lucide-react";
 import Link from "next/link";
+import { usePermissions } from "@/hooks/use-permissions";
 
 // Pages that are restricted by role
 const ROLE_RESTRICTIONS: Record<string, string[]> = {
@@ -23,14 +24,47 @@ const ROLE_RESTRICTIONS: Record<string, string[]> = {
   "/quotations": ["admin", "manager"],
 };
 
+// Pages that require specific granular permissions
+const ROUTE_PERMISSIONS: Record<string, string | string[]> = {
+  "/branches": ["Branches: View", "Branches: Access All"],
+  "/settings": "Settings: View",
+  "/users": "Users: View",
+  "/roles": "Roles: View",
+  "/reports": "Reports: View",
+  "/expenses": "Expenses: View",
+  "/quotations": "Quotations: View",
+  "/customers": "Customers: View",
+  "/leads": "Leads: View",
+  "/bookings": "Bookings: View",
+  "/invoices": "Invoices: View",
+  "/credit-notes": "Invoices: View",
+  "/suppliers": "Suppliers: View",
+  "/receipts": "Accounting: AR",
+  "/accounting": [
+    "Accounting: Journal",
+    "Accounting: Ledger",
+    "Accounting: AR",
+    "Accounting: AP",
+    "Accounting: Chart of Accounts",
+  ],
+};
+
 function getRequiredRoles(path: string): string[] | null {
-  // Check exact match first, then prefix match
   for (const [route, roles] of Object.entries(ROLE_RESTRICTIONS)) {
     if (path === route || path.startsWith(route + "/")) {
       return roles;
     }
   }
-  return null; // No restriction
+  return null;
+}
+
+function getRequiredPermission(path: string): string | string[] | null {
+  for (const [route, perm] of Object.entries(ROUTE_PERMISSIONS)) {
+    if (path === route || path.startsWith(route + "/")) {
+      return perm;
+    }
+  }
+  return null;
 }
 
 export default function DashboardLayout({
@@ -40,6 +74,7 @@ export default function DashboardLayout({
 }) {
   const { isOpen } = useSidebarStore();
   const { user, isAuthenticated, isLoading, serverError } = useAuthStore();
+  const { hasPermission, isAdmin } = usePermissions();
   const router = useRouter();
   const pathname = usePathname();
 
@@ -51,13 +86,6 @@ export default function DashboardLayout({
     if (!isAuthenticated || !user) {
       router.replace("/login");
       return;
-    }
-
-    // Enforce role-based page access
-    const requiredRoles = getRequiredRoles(pathname);
-    if (requiredRoles && !requiredRoles.includes(user.role)) {
-      // Redirect to leads page (agents' default landing page)
-      router.replace("/leads");
     }
   }, [isAuthenticated, user, isLoading, pathname, router, serverError]);
 
@@ -123,7 +151,20 @@ export default function DashboardLayout({
 
   // Check if current page is allowed for this user
   const requiredRoles = getRequiredRoles(pathname);
-  if (requiredRoles && !requiredRoles.includes(user.role)) return null;
+  const requiredPermission = getRequiredPermission(pathname);
+  const userRole = user.role?.toLowerCase();
+
+  const isRoleDenied =
+    !isAdmin &&
+    requiredRoles &&
+    !requiredRoles.some((r) => r.toLowerCase() === userRole);
+
+  const isPermissionDenied =
+    !isAdmin &&
+    requiredPermission &&
+    !hasPermission(requiredPermission);
+
+  const isDenied = isRoleDenied || isPermissionDenied;
 
   return (
     <div className="flex h-screen w-full bg-[var(--tf-bg)]">
@@ -138,7 +179,25 @@ export default function DashboardLayout({
         <Topbar />
         <main className="flex-1 overflow-y-auto bg-[var(--tf-bg)] p-6">
           <ErrorBoundary>
-            {children}
+            {isDenied ? (
+              <div className="flex min-h-[60vh] w-full flex-col items-center justify-center text-center p-6 bg-tf-surface rounded-xl border border-tf-border mt-4">
+                <div className="mx-auto w-16 h-16 bg-red-500/10 rounded-full flex items-center justify-center mb-4">
+                  <ShieldAlert className="w-8 h-8 text-red-500" />
+                </div>
+                <h2 className="text-2xl font-bold text-tf-text-primary tracking-tight">Access Denied</h2>
+                <p className="text-tf-text-secondary text-sm max-w-md mt-2 mb-6">
+                  You do not have permission to access this page. If you require access, please contact your agency administrator.
+                </p>
+                <Button
+                  onClick={() => router.push(hasPermission("Leads: View") ? "/leads" : "/dashboard")}
+                  className="bg-tf-primary text-white hover:bg-tf-primary-hover shadow-sm"
+                >
+                  Return to Accessible Page
+                </Button>
+              </div>
+            ) : (
+              children
+            )}
           </ErrorBoundary>
         </main>
       </div>

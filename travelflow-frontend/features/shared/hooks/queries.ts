@@ -3,13 +3,15 @@ import { API } from "@/lib/data-source";
 import { queryKeys } from "@/lib/query-keys";
 import { Branch, Role, User } from "@/types";
 
-export function useBranches() {
+export function useBranches(options?: { enabled?: boolean }) {
   return useQuery({
     queryKey: queryKeys.shared.branches(),
-    queryFn: () => API.getBranches(),
+    queryFn: () => API.getBranches().catch(() => []),
     placeholderData: (previousData) => previousData,
     staleTime: Infinity, // Branches rarely change
     gcTime: Infinity,
+    retry: false,
+    ...options,
   });
 }
 

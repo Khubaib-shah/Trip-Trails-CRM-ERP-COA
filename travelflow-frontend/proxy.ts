@@ -10,32 +10,74 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-export function proxy(request: NextRequest) {
-  // The backend sets tf_access_token and tf_refresh_token as HttpOnly cookies.
-  // Next.js middleware runs on the Edge and CAN read HttpOnly cookies.
-  const token = request.cookies.get("tf_access_token");
-  const refreshToken = request.cookies.get("tf_refresh_token");
-  const isAuthenticated = !!token || !!refreshToken;
-  
-  const { pathname } = request.nextUrl;
-
-  // Redirect unauthenticated users to login
-  if (!isAuthenticated && !pathname.startsWith("/login")) {
-    const loginUrl = new URL("/login", request.url);
-    return NextResponse.redirect(loginUrl);
-  }
-
-  // Redirect authenticated users away from login
-  if (isAuthenticated && pathname.startsWith("/login")) {
-    const dashboardUrl = new URL("/dashboard", request.url);
-    return NextResponse.redirect(dashboardUrl);
-  }
-
-  // Root redirect
-  if (pathname === "/") {
-    return NextResponse.redirect(
-      new URL(isAuthenticated ? "/dashboard" : "/login", request.url)
+/**
+ * Check if a JWT token string is absent, malformed, or expired.
+ */
+function isTokenExpired(jwtToken?: string): boolean {
+  if (!jwtToken) return true;
+  try {
+    const parts = jwtToken.split(".");
+    if (parts.length !== 3) return true;
+    const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const jsonPayload = decodeURIComponent(
+      atob(base64)
+        .split("")
+        .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
+        .join("")
     );
+    const payload = JSON.parse(jsonPayload);
+    if (payload.exp && Date.now() >= payload.exp * 1000) {
+      return true;
+    }
+    return false;
+  } catch {
+    return true;
+  }
+}
+
+export function proxy(request: NextRequest) {
+  const token = request.cookies.get("tf_access_token")?.value;
+  const refreshToken = request.cookies.get("tf_refresh_token")?.value;
+
+  const isAccessValid = !isTokenExpired(token);
+  const isRefreshValid = !isTokenExpired(refreshToken);
+  const isAuthenticated = isAccessValid || isRefreshValid;
+
+  const { pathname } = request.nextUrl;
+  const isLogoutOrExpired =
+    request.nextUrl.searchParams.has("logout") ||
+    request.nextUrl.searchParams.has("expired");
+
+  // Handle /login route
+  if (pathname.startsWith("/login")) {
+    if (isLogoutOrExpired) {
+      const response = NextResponse.next();
+      response.cookies.delete("tf_access_token");
+      response.cookies.delete("tf_refresh_token");
+      return response;
+    }
+    if (isAuthenticated) {
+      const dashboardUrl = new URL("/dashboard", request.url);
+      return NextResponse.redirect(dashboardUrl);
+    }
+    return NextResponse.next();
+  }
+
+  // Handle root / route
+  if (pathname === "/") {
+    const targetUrl = new URL(isAuthenticated ? "/dashboard" : "/login", request.url);
+    return NextResponse.redirect(targetUrl);
+  }
+
+  // Protect internal app routes
+  if (!isAuthenticated) {
+    const loginUrl = new URL("/login", request.url);
+    const response = NextResponse.redirect(loginUrl);
+    if (token || refreshToken) {
+      response.cookies.delete("tf_access_token");
+      response.cookies.delete("tf_refresh_token");
+    }
+    return response;
   }
 
   return NextResponse.next();

@@ -1,8 +1,11 @@
 import { Router } from "express";
 import { getProfitAndLoss, getBalanceSheet, getTrialBalance } from "../services/report.service";
 import { buildContext } from "../utils/context";
+import { requirePermission } from "../middleware/role.middleware";
 
 const router = Router();
+
+router.use(requirePermission("Reports: View"));
 
 router.get("/profit-and-loss", async (req, res, next) => {
   try {

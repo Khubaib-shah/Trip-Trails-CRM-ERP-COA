@@ -98,14 +98,18 @@ export async function getMe(userId: string) {
     }
   }
 
-  if (user.role === "admin") {
-    userObj.permissions = ["admin"];
+  if (user.role === "admin" || user.role === "owner") {
+    userObj.permissions = ["admin", "all"];
   } else {
     const role = await prisma.role.findFirst({
-      where: { agencyId: user.agencyId, name: user.role },
+      where: {
+        agencyId: user.agencyId,
+        name: { equals: user.role, mode: "insensitive" },
+        isDeleted: false,
+      },
     });
     if (role) {
-      userObj.permissions = role.permissions;
+      userObj.permissions = (role.permissions as string[]) || [];
     } else {
       userObj.permissions = [];
     }

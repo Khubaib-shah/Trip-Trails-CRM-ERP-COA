@@ -18,6 +18,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const { fetchMe } = useAuthStore();
 
   useEffect(() => {
+    // Clean up any zombie service workers registered on localhost:3000
+    if (typeof window !== "undefined" && "serviceWorker" in navigator) {
+      navigator.serviceWorker.getRegistrations().then((registrations) => {
+        for (const registration of registrations) {
+          registration.unregister();
+        }
+      }).catch(() => {});
+    }
+
     if (useApi) {
       // Hydrate user from /auth/me if a cookie session exists.
       // This is a no-op if the cookie is missing or expired.

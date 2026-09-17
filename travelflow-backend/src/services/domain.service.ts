@@ -2,6 +2,7 @@ import { prisma } from "../lib/prisma";
 import { ApiError } from "../utils/ApiError";
 import { generateRef } from "../utils/refGenerator";
 import { buildIdOrRefFilter } from "../utils/serialize";
+import { invalidateRolePermissionsCache } from "../middleware/role.middleware";
 import {
   countryForCity,
   normalizePhone,
@@ -1968,7 +1969,12 @@ export async function listUsers(
   ctx: AgencyContext,
   pagination?: PaginationOptions,
 ) {
-  const filter = { agencyId: ctx.agencyId };
+  const filter: any = { agencyId: ctx.agencyId, isDeleted: false };
+  if (ctx.userRole !== "admin") {
+    if (ctx.userBranchId) {
+      filter.branchId = ctx.userBranchId;
+    }
+  }
 
   if (!pagination) {
     const users = await prisma.user.findMany({
@@ -2067,6 +2073,13 @@ export async function listAgents(ctx: AgencyContext) {
 }
 
 export async function createUser(ctx: AgencyContext, values: UserInput) {
+  if (ctx.userRole !== "admin" && ctx.userBranchId) {
+    if (values.branchId && values.branchId !== ctx.userBranchId) {
+      throw ApiError.forbidden("You can only create and assign users to your own branch");
+    }
+    values.branchId = ctx.userBranchId;
+  }
+
   const existing = await prisma.user.findFirst({
     where: {
       agencyId: ctx.agencyId,
@@ -2135,6 +2148,12 @@ export async function updateUser(
   }
   if (ctx.callerId === id && values.role && ctx.callerRole !== values.role) {
     throw ApiError.forbidden("You cannot change your own role");
+  }
+  if (ctx.userRole !== "admin" && ctx.userBranchId) {
+    if (values.branchId && values.branchId !== ctx.userBranchId) {
+      throw ApiError.forbidden("You cannot assign a user to another branch");
+    }
+    values.branchId = ctx.userBranchId;
   }
 
   const user = await prisma.user.findFirst({
@@ -2334,7 +2353,11 @@ export async function updateRolePermissions(
     where: { id: roleId, ...(agencyScoped(ctx) as any) },
   });
   if (!role) return null;
-  return prisma.role.update({ where: { id: roleId }, data: { permissions } });
+  const isSuperRole = role.name.toLowerCase() === "admin" || role.name.toLowerCase() === "owner";
+  const cleanPermissions = isSuperRole ? permissions : permissions.filter((p) => p !== "all" && p !== "admin");
+  const updated = await prisma.role.update({ where: { id: roleId }, data: { permissions: cleanPermissions } });
+  invalidateRolePermissionsCache(ctx.agencyId);
+  return updated;
 }
 
 export async function createRole(
@@ -2347,9 +2370,11 @@ export async function createRole(
     textColor: string;
   },
 ) {
-  return prisma.role.create({
+  const created = await prisma.role.create({
     data: { agencyId: ctx.agencyId, ...data },
   });
+  invalidateRolePermissionsCache(ctx.agencyId);
+  return created;
 }
 
 export async function deleteRole(ctx: AgencyContext, roleId: string) {
@@ -2361,6 +2386,7 @@ export async function deleteRole(ctx: AgencyContext, roleId: string) {
     where: { id: roleId },
     data: { isDeleted: true, deletedAt: new Date() },
   });
+  invalidateRolePermissionsCache(ctx.agencyId);
   return true;
 }
 

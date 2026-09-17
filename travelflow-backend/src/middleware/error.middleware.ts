@@ -27,6 +27,16 @@ export function errorMiddleware(
   }
 
   if (err instanceof ApiError) {
+    if (err.statusCode === 401) {
+      try {
+        const { COOKIE_OPTIONS } = require("../controllers/auth.controller");
+        res.clearCookie("tf_access_token", COOKIE_OPTIONS);
+        res.clearCookie("tf_refresh_token", COOKIE_OPTIONS);
+      } catch (e) {
+        res.clearCookie("tf_access_token", { path: "/" });
+        res.clearCookie("tf_refresh_token", { path: "/" });
+      }
+    }
     res.status(err.statusCode).json({
       success: false,
       message: err.message,

@@ -5,7 +5,7 @@ import * as authService from "../services/auth.service";
 import { env } from "../config/env";
 
 
-const COOKIE_OPTIONS = {
+export const COOKIE_OPTIONS = {
   httpOnly: true,
   secure: env.isProduction,
   sameSite: "lax" as const,

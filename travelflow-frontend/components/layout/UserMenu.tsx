@@ -22,7 +22,7 @@ export function UserMenu() {
   const handleLogout = async () => {
     showSuccess("Signing out...");
     await logout();
-    window.location.href = "/login";
+    window.location.href = "/login?logout=true";
   };
 
   const displayName = user

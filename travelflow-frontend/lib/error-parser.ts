@@ -59,8 +59,8 @@ const STATUS_MAP: Record<number, Omit<UserFriendlyError, "status">> = {
     code: "UNAUTHORIZED",
   },
   403: {
-    title: "No permission",
-    description: "You don't have permission to do this.",
+    title: "Access Denied",
+    description: "You do not have permission to perform this action.",
     canRetry: false,
     severity: "warning",
     code: "FORBIDDEN",
@@ -157,12 +157,10 @@ function isOffline(): boolean {
 function extractFieldErrors(
   error: unknown,
 ): Record<string, string> | undefined {
-  if (!(error instanceof ApiError)) return undefined;
-  // Our ApiError stringifies the message from JSON; try to extract
-  // structured data if the backend attached it.
   try {
-    const parsed = JSON.parse((error as any)._rawBody ?? "{}");
-    if (parsed.errors && typeof parsed.errors === "object") {
+    const raw = (error as any)?._rawBody ?? (error as any)?.response?.data;
+    const parsed = typeof raw === "string" ? JSON.parse(raw) : raw;
+    if (parsed && parsed.errors && typeof parsed.errors === "object") {
       if (Array.isArray(parsed.errors)) {
         const map: Record<string, string> = {};
         parsed.errors.forEach(
@@ -217,69 +215,105 @@ export function parseApiError(error: unknown): UserFriendlyError {
     };
   }
 
-  // 4. Known ApiError with HTTP status
-  if (error instanceof ApiError && error.status) {
-    const mapped = STATUS_MAP[error.status];
-    if (mapped) {
-      const fieldErrors = extractFieldErrors(error);
-
-      // For validation and auth errors, if the backend sent a human-readable
-      // message (not "HTTP 400"), prefer that.
-      let description = mapped.description;
-      if (
-        (error.status === 400 || error.status === 401 || error.status === 422) &&
-        error.message &&
-        !error.message.startsWith("HTTP ") &&
-        !error.message.startsWith("Server Error")
-      ) {
-        description = error.message;
-      }
-
-      return {
-        ...mapped,
-        description,
-        status: error.status,
-        fieldErrors,
-      };
-    }
-
-    // Catch-all for any other 4xx / 5xx
-    if (error.status >= 500) {
-      return {
-        title: "Server error",
-        description: "Something went wrong on our end. Please try again in a moment.",
-        canRetry: true,
-        severity: "error",
-        code: "SERVER_ERROR",
-        status: error.status,
-      };
-    }
-
+  // 4. Raw string error passed directly to showError
+  if (typeof error === "string") {
+    const isPermission =
+      error.toLowerCase().includes("permission") ||
+      error.toLowerCase().includes("forbidden") ||
+      error.toLowerCase().includes("unauthorized");
     return {
-      title: "Request failed",
-      description:
-        error.message && !error.message.startsWith("HTTP ")
-          ? error.message
-          : "The request could not be completed. Please try again.",
-      canRetry: false,
-      severity: "warning",
-      code: "UNKNOWN",
-      status: error.status,
+      title: isPermission ? "Access Denied" : "Notice",
+      description: error,
+      canRetry: !isPermission,
+      severity: isPermission ? "warning" : "info",
+      code: isPermission ? "FORBIDDEN" : "UNKNOWN",
     };
   }
 
-  // 5. ApiError without status (e.g. invalid JSON)
-  if (error instanceof ApiError) {
+  // Extract status and message flexibly from any error shape (ApiError, Axios, Fetch, Error)
+  const status =
+    (error as any)?.status ??
+    (error as any)?.statusCode ??
+    (error as any)?.response?.status ??
+    (error as any)?.response?.data?.statusCode;
+
+  const rawMessage =
+    (error as any)?.message ??
+    (error as any)?.response?.data?.message;
+
+  const errorCode =
+    (error as any)?.code ??
+    (error as any)?.response?.data?.code;
+
+  // 5. Explicit 403 / FORBIDDEN permission denial
+  if (status === 403 || errorCode === "FORBIDDEN") {
+    let description = "You do not have permission to perform this action.";
+    if (
+      rawMessage &&
+      !rawMessage.startsWith("HTTP ") &&
+      !rawMessage.startsWith("Server Error")
+    ) {
+      description = rawMessage;
+    }
     return {
-      title: "Request failed",
-      description: "The request could not be completed. Please try again.",
+      title: "Access Denied",
+      description,
+      canRetry: false,
+      severity: "warning",
+      code: "FORBIDDEN",
+      status: 403,
+    };
+  }
+
+  // 6. Known status codes in STATUS_MAP
+  if (status && STATUS_MAP[status]) {
+    const mapped = STATUS_MAP[status];
+    const fieldErrors = extractFieldErrors(error);
+
+    let description = mapped.description;
+    if (
+      rawMessage &&
+      !rawMessage.startsWith("HTTP ") &&
+      !rawMessage.startsWith("Server Error")
+    ) {
+      description = rawMessage;
+    }
+
+    return {
+      ...mapped,
+      description,
+      status,
+      fieldErrors,
+    };
+  }
+
+  // 7. 5xx Server Errors
+  if (status && status >= 500) {
+    return {
+      title: "Server error",
+      description: "Something went wrong on our end. Please try again in a moment.",
       canRetry: true,
       severity: "error",
       code: "SERVER_ERROR",
+      status,
     };
   }
 
-  // 6. Completely unknown error
+  // 8. Error instance with custom message
+  if (error instanceof Error && error.message) {
+    const isPermission =
+      error.message.toLowerCase().includes("permission") ||
+      error.message.toLowerCase().includes("forbidden");
+    return {
+      title: isPermission ? "Access Denied" : "Request failed",
+      description: error.message,
+      canRetry: !isPermission,
+      severity: "warning",
+      code: isPermission ? "FORBIDDEN" : "UNKNOWN",
+    };
+  }
+
+  // 9. Completely unknown error
   return {
     title: "Something went wrong",
     description: "An unexpected error occurred. Please try again.",

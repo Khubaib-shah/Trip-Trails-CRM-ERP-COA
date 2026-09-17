@@ -7,8 +7,10 @@ export function requireRole(allowedRoles: string[]) {
     if (!req.user) {
       return next(ApiError.unauthorized());
     }
-    if (!allowedRoles.includes(req.user.role)) {
-      return next(ApiError.forbidden("Insufficient permissions"));
+    const userRole = req.user.role?.toLowerCase();
+    const isAllowed = allowedRoles.some((r) => r.toLowerCase() === userRole);
+    if (!isAllowed) {
+      return next(ApiError.forbidden("You do not have permission to perform this action"));
     }
     next();
   };
@@ -33,17 +35,17 @@ export function invalidateRolePermissionsCache(agencyId?: string) {
   }
 }
 
-export function requirePermission(requiredPermission: string) {
+export function requirePermission(requiredPermission: string | string[]) {
   return async (req: Request, _res: Response, next: NextFunction) => {
     try {
       if (!req.user || !req.agencyId) {
         return next(ApiError.unauthorized());
       }
-      if (req.user.role === "admin") {
+      if (req.user.role === "admin" || req.user.role === "owner") {
         return next();
       }
 
-      const cacheKey = `${req.agencyId}:${req.user.role}`;
+      const cacheKey = `${req.agencyId}:${req.user.role?.toLowerCase()}`;
       const cached = rolePermissionsCache.get(cacheKey);
       const now = Date.now();
 
@@ -52,20 +54,39 @@ export function requirePermission(requiredPermission: string) {
         permissions = cached.permissions;
       } else {
         const role = await prisma.role.findFirst({
-          where: { agencyId: req.agencyId, name: req.user.role, isDeleted: false },
+          where: {
+            agencyId: req.agencyId,
+            name: { equals: req.user.role, mode: "insensitive" },
+            isDeleted: false,
+          },
         });
         if (!role) {
           return next(ApiError.forbidden("Role not found"));
         }
-        permissions = role.permissions as string[];
+        permissions = (role.permissions as string[]) || [];
         rolePermissionsCache.set(cacheKey, {
           permissions,
           expiresAt: now + 60_000,
         });
       }
 
-      if (!permissions.includes(requiredPermission) && !permissions.includes("all")) {
-        return next(ApiError.forbidden(`Requires permission: ${requiredPermission}`));
+      const requiredList = Array.isArray(requiredPermission)
+        ? requiredPermission
+        : [requiredPermission];
+
+      const hasAccess =
+        permissions.includes("all") ||
+        requiredList.some((p) => permissions.includes(p));
+
+      if (!hasAccess) {
+        const permLabel = Array.isArray(requiredPermission)
+          ? requiredPermission.join(" or ")
+          : requiredPermission;
+        return next(
+          ApiError.forbidden(
+            `You do not have permission to perform this action. Required: ${permLabel}`
+          )
+        );
       }
 
       next();

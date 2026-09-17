@@ -97,7 +97,7 @@ protectedRouter.patch(
 );
 protectedRouter.delete(
   "/leads/:id",
-  requireRole(["admin", "manager"]),
+  requirePermission("Leads: Delete"),
   validate(idParamSchema, "params"),
   asyncHandler(domain.deleteLead),
 );
@@ -145,7 +145,7 @@ protectedRouter.patch(
 );
 protectedRouter.delete(
   "/customers/:id",
-  requireRole(["admin", "manager"]),
+  requirePermission("Customers: Delete"),
   validate(idParamSchema, "params"),
   asyncHandler(domain.deleteCustomer),
 );
@@ -182,7 +182,7 @@ protectedRouter.post(
 );
 protectedRouter.delete(
   "/customers/documents/:docId",
-  requireRole(["admin", "manager"]),
+  requirePermission("Customers: Delete"),
   asyncHandler(domain.deleteCustomerDocument),
 );
 protectedRouter.get(
@@ -257,24 +257,24 @@ protectedRouter.delete(
 // Branches
 protectedRouter.get(
   "/branches",
-  requirePermission("Branches: Access All"),
+  requirePermission(["Branches: View", "Branches: Access All"]),
   asyncHandler(domain.listBranches),
 );
 protectedRouter.post(
   "/branches",
-  requirePermission("Branches: Access All"),
+  requirePermission("Branches: Create"),
   validate(branchSchema),
   asyncHandler(domain.createBranch),
 );
 protectedRouter.get(
   "/branches/:id",
-  requirePermission("Branches: Access All"),
+  requirePermission(["Branches: View", "Branches: Access All"]),
   validate(idParamSchema, "params"),
   asyncHandler(domain.getBranch),
 );
 protectedRouter.patch(
   "/branches/:id",
-  requirePermission("Branches: Access All"),
+  requirePermission("Branches: Edit"),
   validate(idParamSchema, "params"),
   validate(branchSchema),
   asyncHandler(domain.updateBranch),
@@ -354,25 +354,25 @@ protectedRouter.delete(
 // Roles
 protectedRouter.get(
   "/roles",
-  requireRole(["admin", "manager"]),
+  requirePermission("Roles: View"),
   asyncHandler(domain.listRoles),
 );
 protectedRouter.post(
   "/roles",
-  requireRole(["admin"]),
+  requirePermission("Roles: Create"),
   validate(createRoleSchema),
   asyncHandler(domain.createRole),
 );
 protectedRouter.patch(
   "/roles/:roleId/permissions",
-  requireRole(["admin"]),
+  requirePermission("Roles: Edit"),
   validate(roleIdParamSchema, "params"),
   validate(rolePermissionsSchema),
   asyncHandler(domain.updateRolePermissions),
 );
 protectedRouter.delete(
   "/roles/:roleId",
-  requireRole(["admin"]),
+  requirePermission("Roles: Delete"),
   validate(roleIdParamSchema, "params"),
   asyncHandler(domain.deleteRole),
 );

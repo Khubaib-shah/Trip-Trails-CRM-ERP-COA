@@ -10,6 +10,8 @@ import { showSuccess, showError } from "@/lib/toast-utils";
 import { User } from "@/types";
 import { Role, PERMISSION_GROUPS } from "@/types/role";
 import { useRoles, useCreateRole, useUpdateRolePermissions, useDeleteRole, useUsers } from "@/features/shared/hooks/queries";
+import { useAuthStore } from "@/store/auth.store";
+import { usePermissions } from "@/hooks/use-permissions";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
@@ -95,6 +97,10 @@ export default function RolesPage() {
   const createMutation = useCreateRole();
   const updatePermissionsMutation = useUpdateRolePermissions();
   const deleteMutation = useDeleteRole();
+  const { hasPermission, isAdmin } = usePermissions();
+  const canCreateRole = isAdmin || hasPermission("Roles: Create");
+  const canEditRole = isAdmin || hasPermission("Roles: Edit");
+  const canDeleteRole = isAdmin || hasPermission("Roles: Delete");
   const [editOpen, setEditOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [editingRole, setEditingRole] = useState<Role | null>(null);
@@ -114,7 +120,7 @@ export default function RolesPage() {
 
   const openEditPermissions = (role: Role) => {
     setEditingRole(role);
-    setSelectedPermissions([...role.permissions]);
+    setSelectedPermissions(role.permissions.filter((p) => p !== "all" && p !== "admin"));
     setEditOpen(true);
   };
 
@@ -139,11 +145,24 @@ export default function RolesPage() {
     if (!editingRole) return;
     setIsSaving(true);
     try {
-      await updatePermissionsMutation.mutateAsync({ id: editingRole.id, permissions: selectedPermissions });
+      const permsToSave =
+        editingRole.name.toLowerCase() === "admin"
+          ? selectedPermissions
+          : selectedPermissions.filter((p) => p !== "all" && p !== "admin");
+
+      await updatePermissionsMutation.mutateAsync({ id: editingRole.id, permissions: permsToSave });
       showSuccess("Permissions updated");
       setEditOpen(false);
+
+      const currentUser = useAuthStore.getState().user;
+      if (
+        currentUser &&
+        currentUser.role.toLowerCase() === editingRole.name.toLowerCase()
+      ) {
+        await useAuthStore.getState().fetchMe();
+      }
     } catch (e: any) {
-      showError(e.message || "Failed to update permissions");
+      showError(e, { context: "Updating permissions" });
     } finally {
       setIsSaving(false);
     }
@@ -157,7 +176,7 @@ export default function RolesPage() {
       setCreateOpen(false);
       form.reset();
     } catch (e: any) {
-      showError(e.message || "Failed to create role");
+      showError(e, { context: "Creating role" });
     } finally {
       setIsSaving(false);
     }
@@ -171,7 +190,7 @@ export default function RolesPage() {
       showSuccess("Role deleted");
       setRoleToDelete(null);
     } catch (e: any) {
-      showError(e.message || "Failed to delete role");
+      showError(e, { context: "Deleting role" });
     } finally {
       setIsSaving(false);
     }
@@ -186,15 +205,17 @@ export default function RolesPage() {
             Manage what each role can access across TravelFlow.
           </p>
         </div>
-        <Button
-          onClick={() => {
-            form.reset();
-            setSelectedPermissions([]);
-            setCreateOpen(true);
-          }}
-        >
-          <Plus className="h-4 w-4 mr-2" /> Add Role
-        </Button>
+        {canCreateRole && (
+          <Button
+            onClick={() => {
+              form.reset();
+              setSelectedPermissions([]);
+              setCreateOpen(true);
+            }}
+          >
+            <Plus className="h-4 w-4 mr-2" /> Add Role
+          </Button>
+        )}
       </div>
 
       <div className="bg-tf-surface rounded-xl border border-tf-border shadow-sm overflow-hidden">
@@ -255,21 +276,25 @@ export default function RolesPage() {
                     <span className="text-xs text-tf-text-muted italic px-2">System Default</span>
                   ) : (
                     <div className="flex items-center justify-end gap-2">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => openEditPermissions(role)}
-                      >
-                        <Pencil className="w-4 h-4 mr-2" /> Permissions
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-tf-danger hover:text-tf-danger hover:bg-tf-danger-soft"
-                        onClick={() => setRoleToDelete(role)}
-                      >
-                        <Trash2 className="w-4 h-4 mr-2" /> Delete
-                      </Button>
+                      {canEditRole && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => openEditPermissions(role)}
+                        >
+                          <Pencil className="w-4 h-4 mr-2" /> Permissions
+                        </Button>
+                      )}
+                      {canDeleteRole && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-tf-danger hover:text-tf-danger hover:bg-tf-danger-soft"
+                          onClick={() => setRoleToDelete(role)}
+                        >
+                          <Trash2 className="w-4 h-4 mr-2" /> Delete
+                        </Button>
+                      )}
                     </div>
                   )}
                 </TableCell>

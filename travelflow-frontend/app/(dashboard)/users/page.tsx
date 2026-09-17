@@ -10,6 +10,8 @@ import { useRouter } from "next/navigation";
 
 import { User, Branch, Role } from "@/types";
 import { useUsers, useCreateUser, useUpdateUser, useDeleteUser, useBranches, useRoles } from "@/features/shared/hooks/queries";
+import { useAuthStore } from "@/store/auth.store";
+import { usePermissions } from "@/hooks/use-permissions";
 import { DataTable } from "@/components/tables/DataTable";
 import { DataTableColumnHeader } from "@/components/tables/DataTableColumnHeader";
 import { DataTableRowActions } from "@/components/tables/DataTableRowActions";
@@ -65,13 +67,20 @@ export default function UsersPage() {
   const updateMutation = useUpdateUser();
   const deleteMutation = useDeleteUser();
 
+  const user = useAuthStore((state) => state.user);
+  const { hasPermission, isAdmin } = usePermissions();
+  const canAccessAllBranches = isAdmin || hasPermission("Branches: Access All");
+
   const form = useForm<UserFormValues>({
     resolver: zodResolver(userSchema),
     defaultValues: userDefaultValues,
   });
 
   const handleOpenCreate = () => {
-    form.reset(userDefaultValues);
+    form.reset({
+      ...userDefaultValues,
+      branchId: !canAccessAllBranches && user?.branchId ? user.branchId : userDefaultValues.branchId,
+    });
     openCreate();
   };
 
@@ -118,8 +127,12 @@ export default function UsersPage() {
     }
   };
 
-  const getBranchName = (branchId: string) =>
-    branches.find((b) => b.id === branchId)?.name ?? branchId;
+  const getBranchName = (branchId: string) => {
+    if (user?.branchId === branchId && user?.branch?.name) {
+      return user.branch.name;
+    }
+    return branches.find((b) => b.id === branchId)?.name ?? branchId;
+  };
 
   const columns: ColumnDef<User>[] = [
     {
@@ -151,9 +164,9 @@ export default function UsersPage() {
         const style = roleDef
           ? { bg: roleDef.color, text: roleDef.textColor }
           : (roleColors[row.original.role] ?? {
-              bg: "var(--tf-surface-2)",
-              text: "var(--tf-text-secondary)",
-            });
+            bg: "var(--tf-surface-2)",
+            text: "var(--tf-text-secondary)",
+          });
         return (
           <span
             className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold capitalize"
@@ -200,10 +213,14 @@ export default function UsersPage() {
         <DataTableRowActions
           row={row}
           onView={() => router.push(`/users/${row.original.id}`)}
-          onEdit={() => {
-            form.reset(mapUserToForm(row.original));
-            openEdit(row.original.id);
-          }}
+          onEdit={
+            isAdmin || hasPermission("Users: Edit")
+              ? () => {
+                form.reset(mapUserToForm(row.original));
+                openEdit(row.original.id);
+              }
+              : undefined
+          }
         />
       ),
     },
@@ -218,12 +235,14 @@ export default function UsersPage() {
             Manage team members and their access across branches.
           </p>
         </div>
-        <Button
-          onClick={handleOpenCreate}
-          className="bg-tf-primary text-white hover:bg-tf-primary-hover shadow-sm"
-        >
-          <Plus className="mr-2 h-4 w-4" /> Add User
-        </Button>
+        {(isAdmin || hasPermission("Users: Create")) && (
+          <Button
+            onClick={handleOpenCreate}
+            className="bg-tf-primary text-white hover:bg-tf-primary-hover shadow-sm"
+          >
+            <Plus className="mr-2 h-4 w-4" /> Add User
+          </Button>
+        )}
       </div>
 
       <div className="bg-tf-surface rounded-xl border border-tf-border shadow-sm overflow-hidden p-6">
@@ -294,20 +313,31 @@ export default function UsersPage() {
                 name="role"
                 label="Role"
                 required
-                options={roles.map((r) => ({
-                  label: r.name,
-                  value: r.name,
-                }))}
+                options={roles
+                  .filter((r) => isAdmin || r.name.toLowerCase() !== "admin")
+                  .map((r) => ({
+                    label: r.name.charAt(0).toUpperCase() + r.name.slice(1),
+                    value: r.name.toLowerCase(),
+                  }))}
               />
               <FormCombobox
                 control={form.control}
                 name="branchId"
                 label="Branch"
                 required
-                options={branches.map((b) => ({
-                  label: b.name,
-                  value: b.id,
-                }))}
+                disabled={!canAccessAllBranches}
+                options={
+                  !canAccessAllBranches && user?.branchId
+                    ? (branches.find((b) => b.id === user.branchId)
+                      ? [{ label: branches.find((b) => b.id === user.branchId)!.name, value: user.branchId }]
+                      : user.branch
+                        ? [{ label: user.branch.name, value: user.branchId }]
+                        : [{ label: "My Branch", value: user.branchId }])
+                    : branches.map((b) => ({
+                      label: b.name,
+                      value: b.id,
+                    }))
+                }
               />
             </div>
             <FormSelect

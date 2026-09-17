@@ -3,6 +3,7 @@
 import { sidebarNav } from "@/constants/nav";
 import { SidebarItem } from "./SidebarItem";
 import { useAuthStore } from "@/store/auth.store";
+import { usePermissions } from "@/hooks/use-permissions";
 
 interface SidebarNavProps {
   isOpen: boolean;
@@ -10,14 +11,24 @@ interface SidebarNavProps {
 
 export function SidebarNav({ isOpen }: SidebarNavProps) {
   const { user } = useAuthStore();
+  const { hasPermission, isAdmin } = usePermissions();
   const role = user?.role || "agent";
 
   return (
     <nav className="flex flex-col gap-6 px-3">
       {sidebarNav.map((group, index) => {
         const filteredItems = group.items.filter((item) => {
-          if (!item.roles) return true;
-          return item.roles.includes(role);
+          if (
+            item.roles &&
+            !isAdmin &&
+            !item.roles.some((r) => r.toLowerCase() === role.toLowerCase())
+          ) {
+            return false;
+          }
+          if (item.permission && !hasPermission(item.permission)) {
+            return false;
+          }
+          return true;
         });
 
         if (filteredItems.length === 0) return null;

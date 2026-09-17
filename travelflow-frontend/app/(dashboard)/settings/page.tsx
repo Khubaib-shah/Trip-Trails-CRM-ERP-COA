@@ -12,8 +12,11 @@ import { showSuccess, showError } from "@/lib/toast-utils";
 import { TemplatesSettings } from "@/components/settings/TemplatesSettings";
 import { ApiClient as API } from "@/lib/api-client";
 import { PhoneInput } from "@/components/ui/phone-input";
+import { usePermissions } from "@/hooks/use-permissions";
 
 export default function SettingsPage() {
+  const { hasPermission, isAdmin } = usePermissions();
+  const canEdit = isAdmin || hasPermission("Settings: Edit");
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -69,6 +72,10 @@ export default function SettingsPage() {
   }, []);
 
   const handleSave = async () => {
+    if (!canEdit) {
+      showError("You do not have permission to edit settings");
+      return;
+    }
     setIsSaving(true);
     try {
       await API.updateSettings({
@@ -109,14 +116,16 @@ export default function SettingsPage() {
             Manage your agency configuration, branding, and preferences.
           </p>
         </div>
-        <Button
-          onClick={handleSave}
-          disabled={isSaving}
-          className="bg-tf-primary text-white hover:bg-tf-primary-hover hidden sm:flex"
-        >
-          <Save className="w-4 h-4 mr-2" />
-          {isSaving ? "Saving..." : "Save Changes"}
-        </Button>
+        {canEdit && (
+          <Button
+            onClick={handleSave}
+            disabled={isSaving}
+            className="bg-tf-primary text-white hover:bg-tf-primary-hover hidden sm:flex"
+          >
+            <Save className="w-4 h-4 mr-2" />
+            {isSaving ? "Saving..." : "Save Changes"}
+          </Button>
+        )}
       </div>
 
       <Tabs defaultValue="company" className="w-full">

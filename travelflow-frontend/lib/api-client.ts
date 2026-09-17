@@ -200,7 +200,7 @@ async function request<T>(
             typeof window !== "undefined" &&
             window.location.pathname !== "/login"
           ) {
-            window.location.href = "/login";
+            window.location.href = "/login?expired=true";
           }
         })
         .finally(() => {
@@ -538,7 +538,8 @@ export const ApiClient = {
     patch<unknown>(`/branches/${id}`, values).then(reviveItem<Branch>),
 
   // ── Users ──
-  getUsers: () => get<unknown[]>("/users").then(reviveList<User>),
+  getUsers: () =>
+    get<unknown[]>("/users", { skipBranchScope: true }).then(reviveList<User>),
 
   getUser: (id: string) => get<unknown>(`/users/${id}`).then(reviveItem<User>),
 
