@@ -14,14 +14,14 @@ import { usePermissions } from "@/hooks/use-permissions";
 
 // Pages that are restricted by role
 const ROLE_RESTRICTIONS: Record<string, string[]> = {
-  "/dashboard": ["admin", "manager"],
-  "/settings": ["admin", "manager"],
-  "/users": ["admin", "manager"],
-  "/roles": ["admin", "manager"],
-  "/reports": ["admin", "manager"],
-  "/expenses": ["admin", "manager"],
-  "/branches": ["admin", "manager"],
-  "/quotations": ["admin", "manager"],
+  "/dashboard": ["owner", "admin", "manager"],
+  "/settings": ["owner", "admin", "manager"],
+  "/users": ["owner", "admin", "manager"],
+  "/roles": ["owner", "admin", "manager"],
+  "/reports": ["owner", "admin", "manager"],
+  "/expenses": ["owner", "admin", "manager"],
+  "/branches": ["owner", "admin", "manager"],
+  "/quotations": ["owner", "admin", "manager"],
 };
 
 // Pages that require specific granular permissions

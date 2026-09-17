@@ -36,7 +36,8 @@ interface AnalyticsResponse {
 export default function ReportsPage() {
   const { user } = useAuthStore();
   const activeCurrency = useBranchStore(state => state.activeCurrency);
-  const isAdmin = user?.role === "admin";
+  const userRole = user?.role?.toLowerCase();
+  const isAdmin = userRole === "admin" || userRole === "owner";
 
   const form = useForm({
     defaultValues: {

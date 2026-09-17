@@ -32,11 +32,14 @@ export function Sidebar() {
   const { logout, user } = useAuthStore();
   const { activeBranchId, setActiveBranchId, setActiveBranch } = useBranchStore();
 
+  const userRole = user?.role?.toLowerCase();
+  const isSuperAdmin = userRole === "admin" || userRole === "owner";
+
   useEffect(() => {
-    if (user?.role === "admin") {
+    if (isSuperAdmin) {
       API.getBranches().then(setBranches).catch(console.error);
     }
-  }, [user?.role]);
+  }, [isSuperAdmin]);
 
   const logo =
     resolvedTheme === "dark" ? appData["logo-light"] : appData["logo-dark"];
@@ -107,7 +110,7 @@ export function Sidebar() {
       )}
 
       {/* Agency Switcher */}
-      {user?.role === "admin" && (
+      {isSuperAdmin && (
         <div className={`border-b border-tf-border ${isOpen ? "p-4" : "p-2"}`}>
           <Button
             variant="outline"

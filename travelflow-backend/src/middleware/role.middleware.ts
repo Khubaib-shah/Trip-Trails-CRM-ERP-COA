@@ -8,6 +8,10 @@ export function requireRole(allowedRoles: string[]) {
       return next(ApiError.unauthorized());
     }
     const userRole = req.user.role?.toLowerCase();
+    // Super-roles (owner and admin) always have full access to role-restricted routes
+    if (userRole === "owner" || userRole === "admin") {
+      return next();
+    }
     const isAllowed = allowedRoles.some((r) => r.toLowerCase() === userRole);
     if (!isAllowed) {
       return next(ApiError.forbidden("You do not have permission to perform this action"));
@@ -41,7 +45,8 @@ export function requirePermission(requiredPermission: string | string[]) {
       if (!req.user || !req.agencyId) {
         return next(ApiError.unauthorized());
       }
-      if (req.user.role === "admin" || req.user.role === "owner") {
+      const userRole = req.user.role?.toLowerCase();
+      if (userRole === "admin" || userRole === "owner") {
         return next();
       }
 

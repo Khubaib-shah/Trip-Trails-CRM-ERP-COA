@@ -172,7 +172,8 @@ export default function BulkImportModal({
   const { user } = useAuthStore();
   const { activeBranchId } = useBranchStore();
   const { data: branches = [], isLoading: isBranchesLoading } = useBranches();
-  const isAdmin = user?.role === "admin";
+  const userRole = user?.role?.toLowerCase();
+  const isAdmin = userRole === "admin" || userRole === "owner";
 
   const [activeTab, setActiveTab] = useState<ImportType>(defaultTab);
   const [parsedData, setParsedData] = useState<ParsedData | null>(null);

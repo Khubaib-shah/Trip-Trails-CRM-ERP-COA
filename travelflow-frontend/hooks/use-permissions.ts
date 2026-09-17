@@ -3,15 +3,17 @@ import { useAuthStore } from "@/store/auth.store";
 export function usePermissions() {
   const user = useAuthStore((state) => state.user);
 
+  const userRole = user?.role?.toLowerCase();
+  const isAdmin =
+    userRole === "admin" ||
+    userRole === "owner" ||
+    user?.permissions?.includes("admin") ||
+    user?.permissions?.includes("all");
+
   const hasPermission = (permission: string | string[]) => {
     if (!user) return false;
     // Admins and owners bypass individual granular permissions
-    if (
-      user.role === "admin" ||
-      user.role === "owner" ||
-      user.permissions?.includes("admin") ||
-      user.permissions?.includes("all")
-    ) {
+    if (isAdmin) {
       return true;
     }
 
@@ -25,11 +27,7 @@ export function usePermissions() {
   return {
     hasPermission,
     permissions: user?.permissions || [],
-    isAdmin:
-      user?.role === "admin" ||
-      user?.role === "owner" ||
-      user?.permissions?.includes("admin") ||
-      user?.permissions?.includes("all"),
-    isManager: user?.role === "manager" || user?.role === "branch_manager",
+    isAdmin,
+    isManager: userRole === "manager" || userRole === "branch_manager",
   };
 }
